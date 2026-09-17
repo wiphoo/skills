@@ -1,0 +1,80 @@
+name: Skills Validation
+
+on:
+  push:
+    paths:
+      - 'skills/**'
+  pull_request:
+    paths:
+      - 'skills/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install yq
+        run: |
+          sudo apt-get update && sudo apt-get install -y yq
+
+      - name: Validate all skill files have frontmatter
+        run: |
+          set -e
+          FAIL=0
+          for f in skills/*.md; do
+            if ! head -3 "$f" | grep -q '^---$'; then
+              echo "FAIL: $f missing frontmatter"
+              FAIL=1
+            fi
+          done
+          if [ "$FAIL" -eq 1 ]; then
+            exit 1
+          fi
+          echo "All skill files have valid frontmatter"
+
+      - name: Validate MIT License present
+        run: |
+          set -e
+          LICENSE_COUNT=$(grep -c "MIT License" skills/LICENSE || true)
+          SKILL_LICENSE_COUNT=0
+          for f in skills/*.md; do
+            if grep -q "MIT License" "$f" 2>/dev/null; then
+              SKILL_LICENSE_COUNT=$((SKILL_LICENSE_COUNT + 1))
+            fi
+          done
+          echo "Found $SKILL_LICENSE_COUNT skill files referencing MIT License"
+          if [ "$LICENSE_COUNT" -lt 1 ]; then
+            echo "FAIL: skills/LICENSE missing MIT License"
+            exit 1
+          fi
+
+      - name: Validate consistent naming pattern
+        run: |
+          set -e
+          ISSUES=0
+          for f in skills/*.md; do
+            NAME=$(grep "^name:" "$f" | sed 's/name: //')
+            BASENAME=$(basename "$f" .md)
+            if [ "$NAME" != "$BASENAME" ]; then
+              echo "INFO: $BASENAME name='$NAME' (mismatch OK if intentional)"
+            fi
+          done
+          echo "Naming validation complete"
+
+      - name: Summarize skill files
+        run: |
+          echo "=== Skills Directory ==="
+          ls -la skills/
+          echo
+          echo "=== File Count ==="
+          ls skills/*.md | wc -l
+          echo
+          echo "=== License ==="
+          head -5 skills/LICENSE
