@@ -28,12 +28,19 @@ jobs:
         run: |
           set -e
           FAIL=0
-          for f in skills/*.md; do
+      # Find all .md files recursively under skills/, excluding .github/
+          MAPFILE=()
+          while IFS= read -r -d '' f; do
+            MAPFILE+=("$f")
+          done < <(find skills -name '*.md' -not -path '*/.github/*' -print0)
+          
+          for f in "${MAPFILE[@]}"; do
             if ! head -3 "$f" | grep -q '^---$'; then
               echo "FAIL: $f missing frontmatter"
               FAIL=1
             fi
           done
+          
           if [ "$FAIL" -eq 1 ]; then
             exit 1
           fi
@@ -44,7 +51,13 @@ jobs:
           set -e
           LICENSE_COUNT=$(grep -c "MIT License" skills/LICENSE || true)
           SKILL_LICENSE_COUNT=0
-          for f in skills/*.md; do
+      # Find all .md files recursively to check for license reference
+          MAPFILE=()
+          while IFS= read -r -d '' f; do
+            MAPFILE+=("$f")
+          done < <(find skills -name '*.md' -not -path '*/.github/*' -print0)
+          
+          for f in "${MAPFILE[@]}"; do
             if grep -q "MIT License" "$f" 2>/dev/null; then
               SKILL_LICENSE_COUNT=$((SKILL_LICENSE_COUNT + 1))
             fi
@@ -59,7 +72,13 @@ jobs:
         run: |
           set -e
           ISSUES=0
-          for f in skills/*.md; do
+      # Find all .md files recursively
+          MAPFILE=()
+          while IFS= read -r -d '' f; do
+            MAPFILE+=("$f")
+          done < <(find skills -name '*.md' -not -path '*/.github/*' -print0)
+          
+          for f in "${MAPFILE[@]}"; do
             NAME=$(grep "^name:" "$f" | sed 's/name: //')
             BASENAME=$(basename "$f" .md)
             if [ "$NAME" != "$BASENAME" ]; then
@@ -71,10 +90,10 @@ jobs:
       - name: Summarize skill files
         run: |
           echo "=== Skills Directory ==="
-          ls -la skills/
+          find skills -type f -not -path '*/.github/*' | sort
           echo
           echo "=== File Count ==="
-          ls skills/*.md | wc -l
+          find skills -name '*.md' -not -path '*/.github/*' | wc -l
           echo
           echo "=== License ==="
           head -5 skills/LICENSE
