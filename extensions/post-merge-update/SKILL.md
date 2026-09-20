@@ -1,5 +1,5 @@
 ---
-name: post-merge-update (generic)
+name: post-merge-update-generic
 description: After a pull request or merge request is merged, update its linked Jira or GitHub issue, then synchronize the local base branch. Uses `gh` for GitHub PR/MR and `curl` for Jira REST API. No MCP required.
 ---
 # Post-Merge Work-Item Update (generic)

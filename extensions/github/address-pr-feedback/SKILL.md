@@ -1,5 +1,5 @@
 ---
-name: address-pr-feedback (codex, GitHub CLI)
+name: address-pr-feedback-codex-github-cli
 description: Use GitHub CLI (`gh`) to fetch unresolved PR review feedback, validate each comment, apply fixes or push back with a CLI reply, then either resolve addressed threads or keep pushed-back threads unresolved for human-in-the-loop review. Use when the user asks to address review comments with step-by-step `gh` commands.
 ---
 

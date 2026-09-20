@@ -1,5 +1,5 @@
 ---
-name: address-pr-feedback (github-cli, step-by-step)
+name: pr-comment-manager
 description: Fetch unresolved PR review threads via `gh`, proceed with fix or pushback, reply via CLI, and either resolve or leave unresolved for HITL review.
 ---
 

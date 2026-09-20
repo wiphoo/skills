@@ -1,5 +1,5 @@
 ---
-name: iterate-github-feedback (AFK)
+name: iterate-github-feedback-afk
 description: Autonomous AFK loop via GitHub CLI (`gh`). Fetches Codex feedback, applies fixes automatically, replies, resolves or leaves unresolved for HITL, and stops on 👍 thumbs-up / clean / blocked / Codex pushback. No user interaction required during loop.
 ---
 
