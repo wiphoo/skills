@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dev-lifecycle"
+version = "1.0.0"
+description = "Umbrella skill for the dev-lifecycle workflow"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["src/dev_lifecycle/extensions/tests"]
