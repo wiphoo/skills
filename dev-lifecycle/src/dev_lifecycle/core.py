@@ -23,6 +23,8 @@ SUBCOMMANDS = [
     ("post-merge", "post-merge <provider>", "github | jira"),
 ]
 
+SUBCOMMAND_NAMES = [s[0] for s in SUBCOMMANDS]
+
 # ---------------------------------------------------------------------------
 # Task subcommand (github | jira)
 # ---------------------------------------------------------------------------
@@ -111,11 +113,16 @@ def handle_post_merge(provider: str) -> None:
 
 def route(subcommand: str, provider: Optional[str] = None) -> bool:
     """Route to appropriate subcommand handler."""
-    if subcommand not in SUBCOMMANDS:
+    if subcommand not in SUBCOMMAND_NAMES:
         print(f"Error: unknown subcommand '{subcommand}'")
         return False
     
-    handler = SUBCOMMANDS[subcommand][1]
+    # Look up handler by subcommand name (first element)
+    handler = None
+    for s in SUBCOMMANDS:
+        if s[0] == subcommand:
+            handler = s[1]
+            break
     if provider is None:
         print(f"Error: provider required for subcommand '{subcommand}'")
         return False
@@ -133,7 +140,7 @@ if __name__ == "__main__":
     # For now, just demonstrate the routing logic
     import argparse
     parser = argparse.ArgumentParser(description="Dev Lifecycle Umbrella Skill")
-    parser.add_argument("subcommand", choices=SUBCOMMANDS)
+    parser.add_argument("subcommand", choices=SUBCOMMAND_NAMES)
     parser.add_argument("--provider", help="provider (github | jira)", default=None)
     args = parser.parse_args()
     
