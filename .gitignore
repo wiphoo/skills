@@ -1,0 +1,18 @@
+# Node / runtime
+node_modules/
+.volta/
+
+# Pi agent
+.pi/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+
+# Temp
+*.tmp
+*.bak
