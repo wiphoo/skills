@@ -1,15 +1,6 @@
 ---
 name: dev-lifecycle
-description: |
-  Umbrella skill for the dev-lifecycle workflow that orchestrates three subcommands:
-  - `dev-lifecycle task <provider>` — task-coding workflow (inspect, plan, implement, PR)
-  - `dev-lifecycle pr-feedback <human|codex>` — PR review feedback handling
-  - `dev-lifecycle post-merge <provider>` — post-merge update workflow
-  
-  Each subcommand follows a deterministic, step-by-step procedure with explicit command templates.
-  - Task: inspect → confirm → worktree → plan → implement → PR → link → cleanup
-  - PR-feedback: fetch threads → classify → reply to correct thread → resolve
-  - Post-merge: confirm merge → detect issues → update comments → transition status → sync branch
+description: Use when managing the full development lifecycle as an agent — starting a task from a GitHub issue or Jira ticket, handling PR review feedback in a conversation, or updating a work item after a merge.
 ---
 
 # Dev Lifecycle — Umbrella Skill
