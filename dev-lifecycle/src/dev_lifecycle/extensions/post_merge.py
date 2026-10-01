@@ -29,16 +29,17 @@ class PostMergeHandler:
     
     def detect_issue_github(self, pr_number: int) -> Optional[int]:
         """Detect issues associated with a merged PR on GitHub."""
-        # Run: gh api -X GET /repos/{repo}/pulls/{pr_number}/issues
+        # Use gh pr view --json closingIssuesReferences (supported v3 field)
         result = subprocess.run([
-            "gh", "api", 
-            f"repos/{self.repo}/pulls/{pr_number}/issues"
+            "gh", "pr", "view", str(pr_number),
+            "--repo", self.repo,
+            "--json", "closingIssuesReferences"
         ], capture_output=True, text=True, check=True)
         
-        issues = json.loads(result.stdout)
-        # GitHub issues are identified by number, not id
-        if issues:
-            return issues[0]["number"]
+        data = json.loads(result.stdout)
+        refs = data.get("closingIssuesReferences", [])
+        if refs:
+            return refs[0].get("number")
         return None
     
     def detect_issue_jira(self, pr_number: int) -> Optional[str]:
@@ -69,13 +70,15 @@ class PostMergeHandler:
         return result.returncode == 0
     
     def update_jira_issue(self, issue_key: str, comment_body: str) -> bool:
-        """Update a Jira issue comment."""
+        """Update a Jira issue comment using ADF format."""
+        # Jira v3 requires Atlassian Document Format
+        adf_body = {"type": "doc", "version": 1, "content": [{"type": "paragraph", "content": [{"type": "text", "text": comment_body}]}]}
         result = subprocess.run([
             "curl", "-s", "-X", "POST",
             f"{os.environ.get('JIRA_BASE_URL', 'https://atlassian.net')}/rest/api/3/issue/{issue_key}/comment",
             "-u", f"{os.environ.get('JIRA_USER_EMAIL', 'user')}:{os.environ.get('JIRA_API_TOKEN', 'token')}",
             "-H", "Content-Type: application/json",
-            "-d", json.dumps({"body": comment_body})
+            "-d", json.dumps({"body": adf_body})
         ], capture_output=True, text=True, check=True)
         return result.returncode == 0
     
