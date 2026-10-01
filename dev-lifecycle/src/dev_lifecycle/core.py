@@ -30,7 +30,12 @@ SUBCOMMAND_NAMES = [s[0] for s in SUBCOMMANDS]
 # ---------------------------------------------------------------------------
 
 def handle_task(provider: str) -> None:
-    """Handle `dev-lifecycle task <provider>`."""
+    """Handle `dev-lifecycle task <provider>`.
+
+    STUB — not yet implemented. Prints step names only; actual task-coding
+    logic lives in extensions/task_coding.py. This skeleton exists so the
+    routing table and CLI can be tested before wiring up real handlers.
+    """
     print(f"[dev-lifecycle] task {provider}")
     
     # Step 1: Inspect

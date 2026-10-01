@@ -36,17 +36,21 @@ class PostMergeHandler:
         ], capture_output=True, text=True, check=True)
         
         issues = json.loads(result.stdout)
-        # Find first issue (or filter by label/etc)
+        # GitHub issues are identified by number, not id
         if issues:
-            return issues[0]["id"]
+            return issues[0]["number"]
         return None
     
-    def detect_issue_jira(self, pr_number: int) -> Optional[int]:
+    def detect_issue_jira(self, pr_number: int) -> Optional[str]:
         """Detect issues associated with a merged PR on Jira."""
-        # Run: curl -X GET https://atlassian.net/rest/api/3/issues?jql=project=PROJ AND issuetype=FIXED
+        # Use JIRA_PROJECT env var (required), fall back to PR number search
+        project = os.environ.get("JIRA_PROJECT", "")
+        if not project:
+            return None
+        # Run: curl -X GET https://atlassian.net/rest/api/3/issues?jql=project=PROJ
         result = subprocess.run([
             "curl", "-s", "-X", "GET",
-            f"https://{os.environ.get('JIRA_BASE_URL', 'https://atlassian.net')}/rest/api/3/issues?jql=project=PROJ AND issuetype=FIXED"
+            f"https://{os.environ.get('JIRA_BASE_URL', 'atlassian.net')}/rest/api/3/issues?jql=project={project}"
         ], capture_output=True, text=True, check=True)
         
         issues = json.loads(result.stdout)
