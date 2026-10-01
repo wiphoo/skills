@@ -122,16 +122,23 @@ def route(subcommand: str, provider: Optional[str] = None) -> bool:
         print(f"Error: unknown subcommand '{subcommand}'")
         return False
     
+    # Validate provider per subcommand
+    valid_providers = {
+        "task": ["github", "jira"],
+        "pr-feedback": ["human", "codex"],
+        "post-merge": ["github", "jira"],
+    }
+    if provider not in valid_providers.get(subcommand, []):
+        print(f"Error: invalid provider '{provider}' for subcommand '{subcommand}'")
+        return False
+
     # Look up handler by subcommand name (first element)
     handler = None
     for s in SUBCOMMANDS:
         if s[0] == subcommand:
             handler = s[1]
             break
-    if provider is None:
-        print(f"Error: provider required for subcommand '{subcommand}'")
-        return False
-    
+
     print(f"[dev-lifecycle] Routing: {subcommand} {provider}")
     return True
 
