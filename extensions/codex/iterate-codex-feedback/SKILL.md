@@ -23,6 +23,9 @@ description: Autonomous AFK loop via GitHub CLI (`gh`). Fetches Codex feedback, 
 # Replace {owner} {repo} {number} as needed
 gh api -X POST /repos/{owner}/{repo}/issues/{number}/comments \
   -f body='@codex review'
+# PR reactions persist across commits, so remember when THIS review was requested (step 2 only
+# accepts a 👍 newer than this); re-set it every time `@codex review` is posted again (step 4)
+REQUESTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # Look for acknowledgement response (eyes emoji 👀) in the latest comment
 # This indicates the reviewer is aware and will provide feedback
@@ -32,8 +35,10 @@ gh api -X POST /repos/{owner}/{repo}/issues/{number}/comments \
 
 ```bash
 # Count 👍 reactions on the PR itself (PR reactions live on the issues endpoint)
-THUMBS_UP=$(gh api /repos/{owner}/{repo}/issues/{number}/reactions 2>/dev/null \
-  | jq '[.[] | select(.content == "+1" and (.user.login | startswith("chatgpt-codex-connector")))] | length')
+# --paginate (default page is 30); only count a 👍 created after the current review request, so a
+# 👍 left from an earlier head does not end the loop before the new head is reviewed
+THUMBS_UP=$(gh api --paginate /repos/{owner}/{repo}/issues/{number}/reactions 2>/dev/null \
+  --jq ".[] | select(.content == \"+1\" and (.user.login | startswith(\"chatgpt-codex-connector\")) and .created_at > \"$REQUESTED_AT\") | .id" | wc -l)
 
 # Check for any ❤️ eyes or review response reactions
 REVIEW_RESPONSE=$(gh api /repos/{owner}/{repo}/pulls/{number}/comments 2>/dev/null | jq -r '.[] | select(.body | contains("👀")) | .user.login + " acknowledged"')
@@ -94,6 +99,7 @@ For each **valid** feedback:
 # Ask for a review of the new head. Without automatic review-on-push nothing else triggers one,
 # and Condition B waits for a review of this exact commit.
 # gh api -X POST /repos/{owner}/{repo}/issues/{number}/comments -f body='@codex review'
+# REQUESTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)   # step 2's 👍 check must postdate this request
 ```
 
 ### 5. Push-back handling (Human-in-the-loop)

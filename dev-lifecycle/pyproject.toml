@@ -7,6 +7,9 @@ name = "dev-lifecycle"
 version = "1.0.0"
 description = "Umbrella skill for the dev-lifecycle workflow"
 
+[project.scripts]
+dev-lifecycle = "dev_lifecycle.core:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
