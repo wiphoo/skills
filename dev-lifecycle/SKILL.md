@@ -231,7 +231,7 @@ Stop if worktree dirty, branch unavailable, or pull cannot fast-forward.
 [ ] Plan generated via writing-plans (task subcommand)
 [ ] Plan executed via subagent-driven-development (task subcommand)
 [ ] PR created with correct base branch (task subcommand)
-[ ] Thread replies use in_reply_to=<comment_id> (pr-feedback)
+[ ] Thread replies post to /comments/<comment_id>/replies (pr-feedback)
 [ ] Threads resolved only when fully addressed (pr-feedback)
 [ ] Merge confirmed before post-merge actions (post-merge)
 [ ] Issue detected from PR metadata (post-merge)
