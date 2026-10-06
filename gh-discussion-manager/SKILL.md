@@ -19,7 +19,7 @@ gh pr view {pr} --json url,reviews
 gh api graphql --paginate -f query='
 query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){
   reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
-    nodes{id isResolved comments(first:1){nodes{databaseId path body}}}}}}}' \
+    nodes{id isResolved comments(first:50){nodes{databaseId path body}}}}}}}' \
   -f o={o} -f r={r} -F n={pr} \
   --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)'
 

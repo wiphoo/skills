@@ -38,10 +38,10 @@ class PostMergeHandler:
         ], capture_output=True, text=True, check=True)
         
         data = json.loads(result.stdout)
-        refs = data.get("closingIssuesReferences", [])
-        if refs:
-            return refs[0].get("number")
-        return None
+        numbers = sorted({r["number"] for r in data.get("closingIssuesReferences", [])})
+        if len(numbers) > 1:
+            raise ValueError(f"ambiguous: PR closes multiple issues {numbers}; choose one explicitly")
+        return numbers[0] if numbers else None
     
     def detect_issue_jira(self, pr_number: int) -> Optional[str]:
         """Detect the Jira key referenced in the PR branch, title, or body."""
@@ -53,8 +53,10 @@ class PostMergeHandler:
 
         data = json.loads(result.stdout)
         text = " ".join(data.get(k) or "" for k in ("headRefName", "title", "body"))
-        match = re.search(r"\b[A-Z][A-Z0-9]+-\d+\b", text)
-        return match.group(0) if match else None
+        keys = sorted(set(re.findall(r"\b[A-Z][A-Z0-9]+-\d+\b", text)))
+        if len(keys) > 1:
+            raise ValueError(f"ambiguous: PR references multiple Jira keys {keys}; choose one explicitly")
+        return keys[0] if keys else None
     
     def update_github_issue(self, issue_number: int, comment_body: str) -> bool:
         """Update a GitHub issue with a comment."""

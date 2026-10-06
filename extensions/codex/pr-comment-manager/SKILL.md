@@ -15,7 +15,7 @@ Review threads exist only in GraphQL (there is no REST `review_threads` route). 
 gh api graphql --paginate -f query='
 query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){
   reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
-    nodes{id isResolved comments(first:1){nodes{databaseId body path line author{login}}}}}}}}' \
+    nodes{id isResolved comments(first:50){nodes{databaseId body path line author{login}}}}}}}}' \
   -f o={owner} -f r={repo} -F n={number} \
   --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)'
 ```

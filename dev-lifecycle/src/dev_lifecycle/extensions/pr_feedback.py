@@ -14,7 +14,7 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         nodes {
           id
           isResolved
-          comments(first: 1) {
+          comments(first: 50) {
             nodes { databaseId body path line author { login } }
           }
         }

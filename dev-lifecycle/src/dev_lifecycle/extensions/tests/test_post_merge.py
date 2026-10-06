@@ -38,6 +38,25 @@ class TestPostMerge(unittest.TestCase):
         self.assertEqual(self.h.detect_issue_github(456), 42)
 
     @patch("subprocess.run")
+    def test_detect_issue_github_rejects_multiple_closing_issues(self, mock_run):
+        mock_run.return_value.stdout = '{"closingIssuesReferences": [{"number": 42}, {"number": 7}]}'
+        with self.assertRaises(ValueError):
+            self.h.detect_issue_github(456)
+
+    @patch("subprocess.run")
+    def test_detect_issue_jira_rejects_multiple_keys(self, mock_run):
+        mock_run.return_value.stdout = json.dumps(
+            {"headRefName": "PROJ-1/x", "title": "t", "body": "also PROJ-2"})
+        with self.assertRaises(ValueError):
+            self.h.detect_issue_jira(456)
+
+    @patch("subprocess.run")
+    def test_detect_issue_jira_same_key_repeated_is_not_ambiguous(self, mock_run):
+        mock_run.return_value.stdout = json.dumps(
+            {"headRefName": "PROJ-1/x", "title": "PROJ-1 fix", "body": "PROJ-1"})
+        self.assertEqual(self.h.detect_issue_jira(456), "PROJ-1")
+
+    @patch("subprocess.run")
     def test_detect_issue_jira_from_branch_title_body(self, mock_run):
         mock_run.return_value.stdout = json.dumps(
             {"headRefName": "feat/x", "title": "Add thing", "body": "Closes PROJ-123"})

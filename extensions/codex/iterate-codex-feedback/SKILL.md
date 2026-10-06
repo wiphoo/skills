@@ -56,9 +56,12 @@ fi
 UNRESOLVED=$(gh api graphql --paginate -f query='
 query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){
   reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
-    nodes{id isResolved comments(first:1){nodes{databaseId body path line author{login}}}}}}}}' \
+    nodes{id isResolved comments(first:50){nodes{databaseId body path line author{login}}}}}}}}' \
   -f o={owner} -f r={repo} -F n={number} \
   --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)' | jq -s '.')
+# Each thread carries its whole conversation (first 50 comments): .comments.nodes[0] is the root
+# (its databaseId is the id to reply to); .comments.nodes[-1] is the latest reply — read it so a
+# human/reviewer answer to an earlier pushback is not reprocessed as stale feedback.
 THREAD_COUNT=$(echo "$UNRESOLVED" | jq 'length')
 echo "Fetched $THREAD_COUNT unresolved feedback threads (full data saved for processing)"
 
@@ -87,6 +90,10 @@ For each **valid** feedback:
 
 # Push new commit
 # git push origin <branch>   (gh has no push subcommand)
+
+# Ask for a review of the new head. Without automatic review-on-push nothing else triggers one,
+# and Condition B waits for a review of this exact commit.
+# gh api -X POST /repos/{owner}/{repo}/issues/{number}/comments -f body='@codex review'
 ```
 
 ### 5. Push-back handling (Human-in-the-loop)
