@@ -39,11 +39,16 @@ REQUESTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # 👍 left from an earlier head does not end the loop before the new head is reviewed
 THUMBS_UP=$(gh api --paginate /repos/{owner}/{repo}/issues/{number}/reactions 2>/dev/null \
   --jq ".[] | select(.content == \"+1\" and (.user.login | startswith(\"chatgpt-codex-connector\")) and .created_at > \"$REQUESTED_AT\") | .id" | wc -l)
+# GitHub returns the EXISTING reaction (old created_at) instead of creating a second +1 from the same
+# user, so once a +1 exists it can never signal a later approval. If one predates this request, ignore
+# reactions entirely and rely on Condition B (Codex review of the current head + no unresolved threads).
+STALE_THUMBS_UP=$(gh api --paginate /repos/{owner}/{repo}/issues/{number}/reactions 2>/dev/null \
+  --jq ".[] | select(.content == \"+1\" and (.user.login | startswith(\"chatgpt-codex-connector\")) and .created_at <= \"$REQUESTED_AT\") | .id" | wc -l)
 
 # Check for any ❤️ eyes or review response reactions
 REVIEW_RESPONSE=$(gh api /repos/{owner}/{repo}/pulls/{number}/comments 2>/dev/null | jq -r '.[] | select(.body | contains("👀")) | .user.login + " acknowledged"')
 
-if [[ "${THUMBS_UP:-0}" -gt 0 ]]; then
+if [[ "${THUMBS_UP:-0}" -gt 0 && "${STALE_THUMBS_UP:-0}" -eq 0 ]]; then
   echo "✓ Reviewer gave 👍 thumbs-up. Stopping loop."
   exit 0
 fi
@@ -61,12 +66,14 @@ fi
 UNRESOLVED=$(gh api graphql --paginate -f query='
 query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){
   reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
-    nodes{id isResolved comments(first:50){nodes{databaseId body path line author{login}}}}}}}}' \
+    nodes{id isResolved
+      root:comments(first:1){nodes{databaseId body path line author{login}}}
+      latest:comments(last:1){nodes{databaseId createdAt body author{login}}}}}}}}' \
   -f o={owner} -f r={repo} -F n={number} \
   --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)' | jq -s '.')
-# Each thread carries its whole conversation (first 50 comments): .comments.nodes[0] is the root
-# (its databaseId is the id to reply to); .comments.nodes[-1] is the latest reply — read it so a
-# human/reviewer answer to an earlier pushback is not reprocessed as stale feedback.
+# .root.nodes[0].databaseId is the id to reply to; .latest.nodes[0] is the newest comment however long
+# the thread is (a last:1 window, so no 50-comment cap) — read it so a human/reviewer answer to an
+# earlier pushback is not reprocessed as stale feedback. If latest == root, nobody has replied yet.
 THREAD_COUNT=$(echo "$UNRESOLVED" | jq 'length')
 echo "Fetched $THREAD_COUNT unresolved feedback threads (full data saved for processing)"
 
@@ -154,11 +161,11 @@ REVIEWED=$(gh api --paginate /repos/{owner}/{repo}/pulls/{number}/reviews \
 # Clean only when THREAD_COUNT == 0 (GraphQL fetch from step 3, re-run after the review) and REVIEWED > 0
 ```
 
-#### Condition C: Codex pushback needs HITL
+#### Condition C: Pushback needs HITL
 ```bash
-# Only Codex-originated pushbacks trigger this stop condition
-# Non-Codex feedback is reported but does not by itself stop the loop
-# Report summary and wait for human decision
+# Any thread left unresolved as a pushback (Codex or human) stops the loop: it stays in THREAD_COUNT,
+# so Condition B could never become clean while it is open
+# Report summary of every pushed-back thread and wait for the human decision
 ```
 
 #### Condition D: Blocked state

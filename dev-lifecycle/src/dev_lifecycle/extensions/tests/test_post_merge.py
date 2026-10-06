@@ -44,6 +44,28 @@ class TestPostMerge(unittest.TestCase):
             self.h.detect_issue_github(456)
 
     @patch("subprocess.run")
+    def test_detect_issue_github_falls_back_to_title_body_reference(self, mock_run):
+        mock_run.return_value.stdout = json.dumps(
+            {"closingIssuesReferences": [], "title": "Add thing", "body": "Related #42"})
+        self.assertEqual(self.h.detect_issue_github(456), 42)
+
+    @patch("subprocess.run")
+    def test_detect_issue_github_fallback_rejects_multiple_and_none(self, mock_run):
+        mock_run.return_value.stdout = json.dumps(
+            {"closingIssuesReferences": [], "title": "Related #10", "body": "Fixes #20"})
+        with self.assertRaises(ValueError):
+            self.h.detect_issue_github(456)
+        mock_run.return_value.stdout = json.dumps(
+            {"closingIssuesReferences": [], "title": "nothing", "body": None})
+        self.assertIsNone(self.h.detect_issue_github(456))
+
+    @patch("subprocess.run")
+    def test_detect_issue_github_closing_reference_wins_over_mentions(self, mock_run):
+        mock_run.return_value.stdout = json.dumps(
+            {"closingIssuesReferences": [{"number": 7}], "title": "Related #10", "body": "x"})
+        self.assertEqual(self.h.detect_issue_github(456), 7)
+
+    @patch("subprocess.run")
     def test_detect_issue_jira_rejects_multiple_keys(self, mock_run):
         mock_run.return_value.stdout = json.dumps(
             {"headRefName": "PROJ-1/x", "title": "t", "body": "also PROJ-2"})

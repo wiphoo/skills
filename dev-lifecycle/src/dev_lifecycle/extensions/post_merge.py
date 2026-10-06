@@ -34,13 +34,17 @@ class PostMergeHandler:
         result = subprocess.run([
             "gh", "pr", "view", str(pr_number),
             "--repo", self.repo,
-            "--json", "closingIssuesReferences"
+            "--json", "closingIssuesReferences,title,body"
         ], capture_output=True, text=True, check=True)
-        
+
         data = json.loads(result.stdout)
+        # Prefer GitHub's closing references; fall back to any #N mentioned in the title/body
         numbers = sorted({r["number"] for r in data.get("closingIssuesReferences", [])})
+        if not numbers:
+            text = f"{data.get('title') or ''} {data.get('body') or ''}"
+            numbers = sorted({int(n) for n in re.findall(r"(?<![\w/])#(\d+)\b", text)})
         if len(numbers) > 1:
-            raise ValueError(f"ambiguous: PR closes multiple issues {numbers}; choose one explicitly")
+            raise ValueError(f"ambiguous: PR references multiple issues {numbers}; choose one explicitly")
         return numbers[0] if numbers else None
     
     def detect_issue_jira(self, pr_number: int) -> Optional[str]:
