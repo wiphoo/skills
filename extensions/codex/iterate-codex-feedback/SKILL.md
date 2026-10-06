@@ -52,11 +52,13 @@ fi
 
 ```bash
 # 1. Fetch ALL unresolved threads (review threads are GraphQL-only; record each thread id, path, line, body, author)
-UNRESOLVED=$(gh api graphql -f query='
-query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
-  reviewThreads(first:100){nodes{id isResolved comments(first:1){nodes{databaseId body path line author{login}}}}}}}}' \
+# --paginate follows pageInfo/endCursor so no unresolved thread past the first 100 is missed
+UNRESOLVED=$(gh api graphql --paginate -f query='
+query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){
+  reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
+    nodes{id isResolved comments(first:1){nodes{databaseId body path line author{login}}}}}}}}' \
   -f o={owner} -f r={repo} -F n={number} \
-  --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)]')
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)' | jq -s '.')
 THREAD_COUNT=$(echo "$UNRESOLVED" | jq 'length')
 echo "Fetched $THREAD_COUNT unresolved feedback threads (full data saved for processing)"
 

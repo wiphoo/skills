@@ -47,7 +47,7 @@ This umbrella skill provides three deterministic subcommands that guide a code c
 4. **Plan** — invoke `writing-plans` skill with `phase: "task"` and provider‑specific steps
 5. **Implement** — execute plan via `subagent-driven-development`
 6. **Create PR** — `gh pr create --title "<title>" --body "<body>" --base <base-branch>`
-7. **Link to Tracker** — GitHub: `gh issue edit <number> --add-label "PR:<pr-number>"`; Jira: post comment with PR URL
+7. **Link to Tracker** — GitHub: `gh issue comment <number> --body "PR opened: <pr-url>"`; Jira: post comment with PR URL
 8. **Cleanup** — `git worktree remove ../<name>`
 
 ---

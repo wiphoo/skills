@@ -70,12 +70,16 @@ fi
 
 #### Jira (curl)
 
+Skip this step when no comment was requested (`COMMENT_BODY` empty) — both trackers reject an empty body:
+
 ```bash
-jq -n --arg t "$COMMENT_BODY" \
-  '{body:{type:"doc",version:1,content:[{type:"paragraph",content:[{type:"text",text:$t}]}]}}' \
-| curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/comment" \
-  -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
-  -H "Content-Type: application/json" -d @-
+if [[ -n "$COMMENT_BODY" ]]; then
+  jq -n --arg t "$COMMENT_BODY" \
+    '{body:{type:"doc",version:1,content:[{type:"paragraph",content:[{type:"text",text:$t}]}]}}' \
+  | curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/comment" \
+    -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
+    -H "Content-Type: application/json" -d @-
+fi
 ```
 
 Works for any issue type — story, task, sub-task, bug, epic.
@@ -83,7 +87,7 @@ Works for any issue type — story, task, sub-task, bug, epic.
 #### GitHub (gh)
 
 ```bash
-gh issue comment "$GITHUB_ISSUE" "${GH_REPO[@]}" --body "$COMMENT_BODY"
+[[ -n "$COMMENT_BODY" ]] && gh issue comment "$GITHUB_ISSUE" "${GH_REPO[@]}" --body "$COMMENT_BODY"
 ```
 
 ### 3. Change status / state

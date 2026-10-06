@@ -5,14 +5,21 @@ description: Fetch unresolved PR review threads via `gh`, proceed with fix or pu
 
 # Address PR Feedback — GitHub CLI Step-by-Step
 
-No MCP — pure `gh` / REST.
+No MCP — pure `gh` / GraphQL.
 
 ## 1. Fetch unresolved feedback
 
+Review threads exist only in GraphQL (there is no REST `review_threads` route). `--paginate` follows `pageInfo` for you:
+
 ```bash
-gh api /repos/{owner}/{repo}/pulls/{number}/review_threads?per_page=100 | jq '.[] | select(.state != "RESOLVED")'
+gh api graphql --paginate -f query='
+query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){
+  reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
+    nodes{id isResolved comments(first:1){nodes{databaseId body path line author{login}}}}}}}}' \
+  -f o={owner} -f r={repo} -F n={number} \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)'
 ```
-Record for each: `thread_id`, `path`, `line`, `body`, `comment_id`, `author`.
+Record for each: `thread_id` (node `id`), `path`, `line`, `body`, `comment_id` (`databaseId`), `author`.
 
 ## 2. Proceed fixed or pushback
 
@@ -24,16 +31,14 @@ Always read file and surrounding code at the comment location before deciding. N
 ## 3. Reply in comment via CLI
 
 ```bash
-gh api -X POST /repos/{owner}/{repo}/pulls/{number}/comments \
-  -f body='Fixed: changed X; tests pass (results: ...)' \
-  -f in_reply_to=<comment_id>
+gh api -X POST /repos/{owner}/{repo}/pulls/{number}/comments/<comment_id>/replies \
+  -f body='Fixed: changed X; tests pass (results: ...)'
 ```
 
 For pushback:
 ```bash
-gh api -X POST /repos/{owner}/{repo}/pulls/{number}/comments \
-  -f body='Pushback: reason; evidence: ...' \
-  -f in_reply_to=<comment_id>
+gh api -X POST /repos/{owner}/{repo}/pulls/{number}/comments/<comment_id>/replies \
+  -f body='Pushback: reason; evidence: ...'
 ```
 
 Always include what changed and exact check results.
@@ -42,8 +47,8 @@ Always include what changed and exact check results.
 
 - **Fixed and verified** → resolve:
   ```bash
-  gh api -X PATCH /repos/{owner}/{repo}/pulls/{number}/review_threads/{thread_id} \
-    -f resolved=true
+  gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' \
+    -f id=<thread_id>
   ```
 - **Failed / incomplete** → leave unresolved; report honestly. Do NOT resolve on a failing fix.
 - **Pushback** → leave unresolved; summarize reasoning for HITL review. Wait for human decision; do not resolve pushed-back threads or force PR forward.

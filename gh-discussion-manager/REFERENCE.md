@@ -10,10 +10,8 @@ Linked workflow: `extensions/github/address-pr-feedback/SKILL.md`
 - `gh pr view {pr} --json url,reviews,comments`
 
 ### 2. Fetch unresolved feedback
-- `gh api repos/{o}/{r}/pulls/{pr}/review_threads?per_page=100`
-  Filter: `.state != "RESOLVED"`
-- `gh api repos/{o}/{r}/pulls/{pr}/comments`
-  Filter: `.unresolved == true`
+- GraphQL (review threads have no REST route): `gh api graphql --paginate` over `pullRequest.reviewThreads { pageInfo { hasNextPage endCursor } nodes { id isResolved comments(first:1) { nodes { databaseId path body } } } }`
+  Filter: `.isResolved | not` (see `scripts/gh-discuss.sh` for a working query)
 
 Record: thread id, diff hunk, path/line, original comment id, body, author.
 
@@ -21,11 +19,11 @@ Record: thread id, diff hunk, path/line, original comment id, body, author.
 Read file at comment location; classify (correctness / security / behavior / style / performance / tests / design). Decide **apply** or **push back**.
 
 ### 4. Reply via CLI
-- Inline/reply: `gh api -X POST repos/{o}/{r}/pulls/{pr}/comments -f body="Reply + evidence" -f in_reply_to=<comment_id>`
+- Inline/reply: `gh api -X POST repos/{o}/{r}/pulls/{pr}/comments/<comment_id>/replies -f body="Reply + evidence"`
 - Top-level PR: `gh pr comment {pr} --body "..."`
 
 ### 5. Resolve / keep unresolved
-- Resolved when fully addressed: `gh api -X PATCH repos/{o}/{r}/pulls/{pr}/review_threads/{thread_id} -f resolved=true`
+- Resolved when fully addressed: `gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id=<thread_id>`
 - If incomplete/check fails, report and **leave unresolved**.
 - Pushed-back threads stay unresolved for HITL.
 

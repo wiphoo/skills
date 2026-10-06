@@ -15,13 +15,19 @@ gh repo view --json nameWithOwner
 gh pr view {pr} --json url,reviews
 
 # Fetch unresolved review threads
-gh api repos/{o}/{r}/pulls/{pr}/review_threads --jq '.[] | select(.state!="RESOLVED") | {id:.id, path:.path, body:.comments[0].body}'
+# (review threads are GraphQL-only; --paginate follows pageInfo)
+gh api graphql --paginate -f query='
+query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){
+  reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
+    nodes{id isResolved comments(first:1){nodes{databaseId path body}}}}}}}' \
+  -f o={o} -f r={r} -F n={pr} \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)'
 
-# Reply to thread
-gh api -X POST repos/{o}/{r}/pulls/{pr}/comments -f body="..." -f in_reply_to={id}
+# Reply to thread (comment_id = first comment's databaseId)
+gh api -X POST repos/{o}/{r}/pulls/{pr}/comments/{comment_id}/replies -f body="..."
 
-# Resolve thread
-gh api -X PATCH repos/{o}/{r}/pulls/{pr}/review_threads/{id} -f resolved=true
+# Resolve thread (thread id = GraphQL node id)
+gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id={id}
 
 # Emoji/status
 gh api repos/{o}/{r}/issues/{pr}/reactions --jq '.[] | {content:.content, user:.user.login}'
@@ -29,9 +35,9 @@ gh api repos/{o}/{r}/issues/{pr}/reactions --jq '.[] | {content:.content, user:.
 
 ## Workflows (summary)
 
-- **Fetch unresolved**: `review_threads` + `comments` with `unresolved==true`.
-- **Reply**: `POST .../comments` with `in_reply_to`; `gh pr comment` for top-level.
-- **Resolve**: `PATCH .../review_threads/{id}`. Leave unresolved for HITL when pushed back.
+- **Fetch unresolved**: GraphQL `reviewThreads` filtered on `isResolved == false`.
+- **Reply**: `POST .../comments/{comment_id}/replies`; `gh pr comment` for top-level.
+- **Resolve**: GraphQL `resolveReviewThread`. Leave unresolved for HITL when pushed back.
 - **Check status**: reactions via `issues/{pr}/reactions`; reviews via `gh pr view`.
 
 ## Scripts

@@ -78,7 +78,7 @@ def handle_pr_feedback(mode: str) -> None:
     
     # Step 1: Fetch unresolved feedback
     print("[dev-lifecycle] Fetching unresolved PR feedback...")
-    # gh api .../pulls/{n}/review_threads
+    # gh api graphql (pullRequest.reviewThreads)
     
     # Step 2: For each thread, classify and fix
     print("[dev-lifecycle] Processing feedback threads...")

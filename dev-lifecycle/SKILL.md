@@ -79,7 +79,7 @@ gh pr create --title "<title>" --body "<body>" --base <base-branch>
 #### Step 7: Link to Tracker
 ```bash
 # GitHub
-gh issue edit <issue-number> --add-label "PR:<pr-number>"
+gh issue comment <issue-number> --body "PR opened: <pr-url>"   # no precreated label needed
 
 # Jira
 # Jira v3 comment bodies must be Atlassian Document Format (ADF)
