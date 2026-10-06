@@ -58,11 +58,11 @@ This umbrella skill provides three deterministic subcommands that guide a code c
 
 **Steps:**
 
-1. **Fetch Unresolved Threads** — `gh api "/repos/{owner}/{repo}/pulls/{number}/review_threads?per_page=100" | jq '.[] | select(.state != "RESOLVED")'`
+1. **Fetch Unresolved Threads** — GraphQL only: `gh api graphql` with `pullRequest.reviewThreads { nodes { id isResolved … } }` (see `SKILL.md` for the full query)
 2. **Read Context** — read file at comment location using `cat <path> | head -n $((line + 10)) | tail -n 20`
 3. **Classify** — `apply` (correctness / security / bug / missing test) vs `pushback` (style preference / out of scope / design disagreement)
-4. **Fix & Reply** — apply smallest correct change, then `gh api -X POST "/repos/{owner}/{repo}/pulls/{number}/comments" -f body="Fixed: …" -f in_reply_to=<comment_id>`
-5. **Resolve Thread** — `gh api -X PATCH "/repos/{owner}/{repo}/pulls/{number}/review_threads/{thread_id}" -f resolved=true`
+4. **Fix & Reply** — apply smallest correct change, then `gh api -X POST "/repos/{owner}/{repo}/pulls/{number}/comments/<comment_id>/replies" -f body="Fixed: …"`
+5. **Resolve Thread** — GraphQL `resolveReviewThread(input: {threadId: <thread_id>})` via `gh api graphql` (see `SKILL.md`)
 
 ---
 
@@ -72,8 +72,8 @@ This umbrella skill provides three deterministic subcommands that guide a code c
 
 **Steps:**
 
-1. **Confirm Merge** — `gh pr view <number> --json merged,mergeCommit,baseRef`; continue only if `merged: true` and `mergeCommit` present
-2. **Detect Issue** — extract issue number/key from PR title/body: `gh pr view <number> --jq '.title + .body' | grep -oE '(#[0-9]+|[A-Z]+-[0-9]+)' | head -1`
+1. **Confirm Merge** — `gh pr view <number> --json mergedAt,mergeCommit,baseRefName`; continue only if `mergedAt` is non-null and `mergeCommit` present
+2. **Detect Issue** — extract issue number/key from PR title/body: `gh pr view <number> --json title,body --jq '.title + .body' | grep -oE '(#[0-9]+|[A-Z]+-[0-9]+)' | head -1`
 3. **Update Comments** — GitHub: `gh issue comment <number> --body "PR merged: <url>\nMerge commit: <sha>\nBase branch: <branch>"`; Jira: post comment via REST
 4. **Transition Status** — GitHub: add label; Jira: resolve transition via REST using project key and status ID
 5. **Sync Local Branch** — `git switch <base-branch>` then `git pull --ff-only`

@@ -59,10 +59,19 @@ class TestPostMerge(unittest.TestCase):
         self.assertEqual(json.loads(cmd[cmd.index("-d") + 1])["body"]["type"], "doc")
 
     @patch("subprocess.run")
-    def test_sync_branch_runs_two_commands(self, mock_run):
+    def test_sync_branch_switches_then_pulls_when_clean(self, mock_run):
+        mock_run.return_value.stdout = ""
         self.assertTrue(self.h.sync_branch("main"))
         self.assertEqual([c.args[0] for c in mock_run.call_args_list],
-                         [["git", "switch", "main"], ["git", "pull", "--ff-only"]])
+                         [["git", "status", "--porcelain"],
+                          ["git", "switch", "main"], ["git", "pull", "--ff-only"]])
+
+    @patch("subprocess.run")
+    def test_sync_branch_refuses_dirty_worktree(self, mock_run):
+        mock_run.return_value.stdout = " M file.py\n"
+        with self.assertRaises(RuntimeError):
+            self.h.sync_branch("main")
+        self.assertEqual(mock_run.call_count, 1)  # never switched
 
 
 if __name__ == "__main__":

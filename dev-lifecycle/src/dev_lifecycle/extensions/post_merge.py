@@ -110,7 +110,11 @@ class PostMergeHandler:
     
     def sync_branch(self, base_branch: str) -> bool:
         """Sync local branch with remote after merge."""
-        # Fixed: Run git switch and git pull as separate subprocesses
+        # Stop on a dirty worktree: `git switch` would carry local edits onto the base branch
+        status = subprocess.run(["git", "status", "--porcelain"],
+                                capture_output=True, text=True, check=True)
+        if status.stdout.strip():
+            raise RuntimeError("worktree is dirty; refusing to switch branches")
         subprocess.run(["git", "switch", base_branch], capture_output=True, text=True, check=True)
         subprocess.run(["git", "pull", "--ff-only"], capture_output=True, text=True, check=True)
         return True

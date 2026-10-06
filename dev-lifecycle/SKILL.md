@@ -162,7 +162,7 @@ Continue only if `mergedAt` is non-null and `mergeCommit` present. Use actual `b
 #### Step 2: Detect Issue
 ```bash
 # GitHub: extract from PR title/body
-gh pr view <number> --jq '.title + .body' | grep -oE '(#[0-9]+|[A-Z]+-[0-9]+)' | head -1
+gh pr view <number> --json title,body --jq '.title + .body' | grep -oE '(#[0-9]+|[A-Z]+-[0-9]+)' | head -1
 
 # Jira: same pattern match from title/body/branch
 ```

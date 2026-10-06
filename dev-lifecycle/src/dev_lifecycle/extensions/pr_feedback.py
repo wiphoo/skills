@@ -6,10 +6,11 @@ from typing import Any, Dict, List
 
 # Review-thread listing and resolution exist only in the GraphQL API.
 THREADS_QUERY = """
-query($owner: String!, $name: String!, $number: Int!) {
+query($owner: String!, $name: String!, $number: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
-      reviewThreads(first: 100) {
+      reviewThreads(first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
         nodes {
           id
           isResolved
@@ -39,18 +40,25 @@ class PRFeedbackHandler:
     def fetch_unresolved_threads(self, pr_number: int) -> List[Dict[str, Any]]:
         """Fetch unresolved review threads (GraphQL node id + first comment)."""
         owner, name = self.repo.split("/", 1)
-        result = subprocess.run([
-            "gh", "api", "graphql",
-            "-f", f"query={THREADS_QUERY}",
-            "-f", f"owner={owner}",
-            "-f", f"name={name}",
-            "-F", f"number={pr_number}",
-        ], capture_output=True, text=True, check=True)
+        unresolved: List[Dict[str, Any]] = []
+        cursor = None
+        while True:
+            cmd = [
+                "gh", "api", "graphql",
+                "-f", f"query={THREADS_QUERY}",
+                "-f", f"owner={owner}",
+                "-f", f"name={name}",
+                "-F", f"number={pr_number}",
+            ]
+            if cursor:
+                cmd += ["-f", f"after={cursor}"]
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
-        data = json.loads(result.stdout)
-        threads = data["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
-        # ponytail: first 100 threads only, add cursor pagination if a PR exceeds that
-        return [t for t in threads if not t["isResolved"]]
+            page = json.loads(result.stdout)["data"]["repository"]["pullRequest"]["reviewThreads"]
+            unresolved += [t for t in page["nodes"] if not t["isResolved"]]
+            if not page["pageInfo"]["hasNextPage"]:
+                return unresolved
+            cursor = page["pageInfo"]["endCursor"]
 
     def classify_feedback(self, file_path: str, line: int, feedback_body: str) -> str:
         """Classify feedback as 'apply' or 'pushback'."""

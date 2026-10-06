@@ -14,9 +14,17 @@ No MCP required — use `gh` and the REST API directly.
    - Confirm auth and repo context: `gh auth status` and `gh repo view`.
 
 2. **Fetch unresolved feedback**
-   - `gh api /repos/{owner}/{repo}/pulls/{number}/review_threads?per_page=100`
-   - Filter threads where `state != "RESOLVED"`.
-   - Record for each: thread id, diff hunk, path/line, original comment id, body, author.
+   - Review threads exist only in GraphQL (there is no REST `review_threads` route):
+     ```bash
+     gh api graphql -f query='
+     query($o:String!,$r:String!,$n:Int!,$after:String){repository(owner:$o,name:$r){pullRequest(number:$n){
+       reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
+         nodes{id isResolved comments(first:1){nodes{databaseId body path line author{login}}}}}}}}' \
+       -f o={owner} -f r={repo} -F n={number} \
+       --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)'
+     ```
+     Repeat with `-f after=<endCursor>` while `hasNextPage` is true.
+   - Record for each: thread id (GraphQL node id), path/line, original comment id (`databaseId`), body, author.
 
 3. **Validate every comment**
    - Read the file and surrounding code at the comment location.
@@ -29,12 +37,12 @@ No MCP required — use `gh` and the REST API directly.
 
 5. **Reply in comment via CLI**
    - Post on the original review comment:  
-     `gh api -X POST /repos/{owner}/{repo}/pulls/{number}/comments -f body='...' -f in_reply_to=<comment_id>`
+     `gh api -X POST /repos/{owner}/{repo}/pulls/{number}/comments/<comment_id>/replies -f body='...'`
    - Include what changed and exact check results.
 
 6. **Resolve or keep unresolved**
    - Resolved only when the feedback is fully addressed:  
-     `gh api -X PATCH /repos/{owner}/{repo}/pulls/{number}/review_threads/{thread_id} -f resolved=true`
+     `gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id=<thread_id>`
    - If a check fails or the fix is incomplete, report it and **leave unresolved**.
    - Pushed-back items stay unresolved for human review.
 

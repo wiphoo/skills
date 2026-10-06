@@ -48,6 +48,12 @@ ISSUE_REF="$1"
 if echo "$ISSUE_REF" | grep -qE '^[A-Z]+-[0-9]+$'; then
   TRACKER="jira"
   JIRA_ISSUE="$ISSUE_REF"
+elif echo "$ISSUE_REF" | grep -qE 'github\.com/[^/]+/[^/]+/issues/[0-9]+'; then
+  # Issue URL: take both the repo and the number from it
+  TRACKER="github"
+  GITHUB_REPO=$(echo "$ISSUE_REF" | sed -E 's#.*github\.com/([^/]+/[^/]+)/issues/.*#\1#')
+  GITHUB_ISSUE=$(echo "$ISSUE_REF" | sed -E 's#.*/issues/([0-9]+).*#\1#')
+  GH_REPO=(--repo "$GITHUB_REPO")
 elif echo "$ISSUE_REF" | grep -qE '#[0-9]+'; then
   TRACKER="github"
   GITHUB_ISSUE=$(echo "$ISSUE_REF" | grep -oE '#[0-9]+' | tr -d '#')
@@ -87,7 +93,7 @@ gh issue comment "$GITHUB_ISSUE" "${GH_REPO[@]}" --body "$COMMENT_BODY"
 Fetch available transitions for the issue:
 
 ```bash
-TRANSITIONS=$(curl -s "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
+TRANSITIONS=$(curl -s --fail-with-body "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
   -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
   -H "Accept: application/json")
 
@@ -101,11 +107,15 @@ Apply transition by name or ID:
 TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r ".transitions[] | select(.name == \"$TARGET_STATUS\") | .id")
 
 if [[ -n "$TRANSITION_ID" ]]; then
-  curl -s -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
+  # --fail-with-body makes curl exit non-zero on 4xx/5xx; only report success when it does not
+  if curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
     -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"transition\": {\"id\": \"$TRANSITION_ID\"}}"
-  echo "✅ $JIRA_ISSUE transitioned to $TARGET_STATUS"
+    -d "{\"transition\": {\"id\": \"$TRANSITION_ID\"}}"; then
+    echo "✅ $JIRA_ISSUE transitioned to $TARGET_STATUS"
+  else
+    echo "❌ Jira rejected the transition to $TARGET_STATUS"; exit 1
+  fi
 else
   echo "⚠️ Transition '$TARGET_STATUS' not found. Available:"
   echo "$TRANSITIONS" | jq -r '.transitions[] | .name'
