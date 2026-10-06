@@ -65,10 +65,16 @@ Detect source:
 - Jira: matches `[A-Z]+-[0-9]+`
 - GitHub Issues: matches `#123` or issue URL
 
-If ambiguous, ask rather than guess.
+If ambiguous, ask rather than guess. Prefer GitHub's closing references; otherwise collect every distinct match and stop unless exactly one remains (a PR saying `Related #10 … Fixes #20` must not silently pick `#10`):
 
 ```bash
-ISSUE_REF=$(gh pr view <number> --json title,body --jq '.title + .body' | grep -oE '([A-Z]+-[0-9]+|#[0-9]+)' | head -n1)
+CLOSING=$(gh pr view <number> --json closingIssuesReferences --jq '.closingIssuesReferences[] | "#\(.number)"')
+CANDIDATES=${CLOSING:-$(gh pr view <number> --json title,body --jq '.title + " " + .body' \
+  | grep -oE '([A-Z]+-[0-9]+|#[0-9]+)' | sort -u)}
+if [[ $(echo "$CANDIDATES" | grep -c .) -ne 1 ]]; then
+  echo "❌ Ambiguous or missing work item (candidates: ${CANDIDATES:-none}). Ask the user."; exit 1
+fi
+ISSUE_REF="$CANDIDATES"
 ```
 
 ### 4. Update the source record

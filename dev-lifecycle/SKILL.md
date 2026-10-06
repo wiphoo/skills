@@ -106,10 +106,11 @@ Fetch unresolved PR review threads, classify each, apply fixes or push back, rep
 
 #### Step 1: Fetch Unresolved Threads
 ```bash
-# Review threads exist only in GraphQL (no REST route)
-gh api graphql -f query='
-query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
-  reviewThreads(first:100){nodes{id isResolved comments(first:1){nodes{databaseId body path line author{login}}}}}}}}' \
+# Review threads exist only in GraphQL (no REST route); --paginate follows pageInfo/$endCursor
+gh api graphql --paginate -f query='
+query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){
+  reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
+    nodes{id isResolved comments(first:1){nodes{databaseId body path line author{login}}}}}}}}' \
   -f o={owner} -f r={repo} -F n={number} \
   --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)'
 ```
@@ -161,8 +162,9 @@ Continue only if `mergedAt` is non-null and `mergeCommit` present. Use actual `b
 
 #### Step 2: Detect Issue
 ```bash
-# GitHub: extract from PR title/body
-gh pr view <number> --json title,body --jq '.title + .body' | grep -oE '(#[0-9]+|[A-Z]+-[0-9]+)' | head -1
+# GitHub: prefer closing references, else every distinct match in title/body; stop unless exactly one
+gh pr view <number> --json closingIssuesReferences --jq '.closingIssuesReferences[] | "#\(.number)"'
+gh pr view <number> --json title,body --jq '.title + " " + .body' | grep -oE '(#[0-9]+|[A-Z]+-[0-9]+)' | sort -u
 
 # Jira: same pattern match from title/body/branch
 ```

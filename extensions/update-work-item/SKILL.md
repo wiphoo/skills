@@ -133,17 +133,14 @@ fi
 Update label or close/reopen (state change):
 
 ```bash
-# Add label (acts as state marker if using labels for status)
-if [[ -n "$TARGET_STATUS" ]]; then
-  gh issue edit "$GITHUB_ISSUE" "${GH_REPO[@]}" --add-label "$TARGET_STATUS"
-fi
-
-# Close / reopen (direct state change)
-if [[ "$TARGET_STATUS" == "done" || "$TARGET_STATUS" == "closed" ]]; then
-  gh issue close "$GITHUB_ISSUE" "${GH_REPO[@]}"
-elif [[ "$TARGET_STATUS" == "reopen" ]]; then
-  gh issue reopen "$GITHUB_ISSUE" "${GH_REPO[@]}"
-fi
+# Reserved state values change the issue state directly; anything else is treated
+# as an existing label name (`--add-label` fails if the label does not exist)
+case "$TARGET_STATUS" in
+  "")             ;;  # no status change requested
+  done|closed)    gh issue close  "$GITHUB_ISSUE" "${GH_REPO[@]}" ;;
+  reopen)         gh issue reopen "$GITHUB_ISSUE" "${GH_REPO[@]}" ;;
+  *)              gh issue edit   "$GITHUB_ISSUE" "${GH_REPO[@]}" --add-label "$TARGET_STATUS" ;;
+esac
 ```
 
 If the project uses GitHub Project fields (status field), you may need to update via `gh api` instead of label change.
