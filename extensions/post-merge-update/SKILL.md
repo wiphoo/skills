@@ -35,18 +35,18 @@ Ensure `gh` is authenticated for GitHub operations.
 Use `gh` to read merged PR/MR metadata. Extract merge commit, base branch, title, body, and any linked issue references.
 
 ```bash
-gh pr view <number> --json status,merged,mergeCommit,baseRef,title,body,url,headRefName
+gh pr view <number> --json state,mergedAt,mergeCommit,baseRefName,title,body,url,headRefName
 ```
 
 If using a non-GitHub provider, use its CLI or REST API. Stop if not merged.
 
 ### 2. Validate the merge
 
-Continue only when `merged` is true and a `mergeCommit` is present. Use the actual base branch from the PR/MR; never assume `main`.
+Continue only when `mergedAt` is non-null and a `mergeCommit` is present. Use the actual base branch (`baseRefName`) from the PR/MR; never assume `main`.
 
 ```bash
-MERGED=$(gh pr view <number> --jq '.merged')
-if [[ "$MERGED" != "true" ]]; then
+MERGED_AT=$(gh pr view <number> --json mergedAt --jq '.mergedAt // empty')
+if [[ -z "$MERGED_AT" ]]; then
   echo "❌ PR is not merged. Abort."
   exit 1
 fi
@@ -68,34 +68,35 @@ Detect source:
 If ambiguous, ask rather than guess.
 
 ```bash
-ISSUE_REF=$(gh pr view <number> --jq '.title + .body' | grep -oE '([A-Z]+-[0-9]+|#[0-9]+)' | head -n1)
+ISSUE_REF=$(gh pr view <number> --json title,body --jq '.title + .body' | grep -oE '([A-Z]+-[0-9]+|#[0-9]+)' | head -n1)
 ```
 
 ### 4. Update the source record
 
 #### 4.1 Jira update (curl)
 
-Add comment:
+Add comment (Jira v3 requires an ADF body and the singular `/comment` resource):
 
 ```bash
-curl -s -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/comments" \
+jq -n --arg t "PR merged: <URL> | Merge commit: <COMMIT> | Base branch: <BASE_BRANCH>" \
+  '{body:{type:"doc",version:1,content:[{type:"paragraph",content:[{type:"text",text:$t}]}]}}' \
+| curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/comment" \
   -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"body\": \"PR merged: <URL>\nMerge commit: <COMMIT>\nBase branch: <BASE_BRANCH>\"}"
+  -H "Content-Type: application/json" -d @-
 ```
 
 Transition status if target supplied:
 
 ```bash
-PROJECT_KEY=$(echo "$JIRA_ISSUE" | cut -d- -f1)
-STATUS_RESPONSE=$(curl -s "$JIRA_BASE_URL/rest/api/3/project/$PROJECT_KEY/statuses" \
+# The transitions endpoint takes a transition ID, not a status ID
+TRANSITIONS=$(curl -s --fail-with-body "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
   -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" -H "Accept: application/json")
-TARGET_STATUS_ID=$(echo "$STATUS_RESPONSE" | jq -r ".[] | select(.name == \"$TARGET_STATUS\") | .id")
-if [[ -n "$TARGET_STATUS_ID" ]]; then
-  curl -s -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
+TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r ".transitions[] | select(.name == \"$TARGET_STATUS\") | .id")
+if [[ -n "$TRANSITION_ID" ]]; then
+  curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
     -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"transition\": {\"id\": \"$TARGET_STATUS_ID\"}}"
+    -d "{\"transition\": {\"id\": \"$TRANSITION_ID\"}}"
   echo "✅ Issue $JIRA_ISSUE transitioned to $TARGET_STATUS"
 else
   echo "⚠️ Target status \"$TARGET_STATUS\" not found."

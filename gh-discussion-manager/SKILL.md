@@ -1,6 +1,6 @@
 ---
 name: gh-discussion-manager
-description: Manage GitHub PR and discussion threads via gh CLI — fetch unresolved discussions, reply to threads, resolve or keep unresolved, and check emoji/review status. Use when working with PR reviews/discussion threads or when user asks to reply, resolve, or inspect PR discussion state via gh. See REFERENCE.md for full step-by-step workflow linked from @extensions/github/addree-github-pr-feedback.md.
+description: Manage GitHub PR and discussion threads via gh CLI — fetch unresolved discussions, reply to threads, resolve or keep unresolved, and check emoji/review status. Use when working with PR reviews/discussion threads or when user asks to reply, resolve, or inspect PR discussion state via gh. See REFERENCE.md for full step-by-step workflow linked from @extensions/github/address-pr-feedback/SKILL.md.
 ---
 
 # gh-discussion-manager

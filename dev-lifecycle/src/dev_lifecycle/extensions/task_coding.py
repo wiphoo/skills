@@ -6,6 +6,8 @@ Provides plan generation + execution lifecycle that the umbrella skill
 calls into when `dev-lifecycle task` is invoked.
 """
 
+import json
+import os
 from typing import Optional, Dict, Any
 
 

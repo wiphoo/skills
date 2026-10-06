@@ -153,7 +153,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Dev Lifecycle Umbrella Skill")
     parser.add_argument("subcommand", choices=SUBCOMMAND_NAMES)
-    parser.add_argument("--provider", help="provider (github | jira)", default=None)
+    parser.add_argument("provider", nargs="?", help="github | jira (task, post-merge) or human | codex (pr-feedback)")
     args = parser.parse_args()
     
     if route(args.subcommand, args.provider):

@@ -45,8 +45,8 @@ Execute the complete task-coding workflow for GitHub or Jira issues.
 gh issue view <issue-number>
 
 # Jira
-curl -s -H "Authorization: Bearer $JIRA_API_TOKEN" \
-  -H "Content-Type: application/json" \
+curl -s --fail-with-body -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
+  -H "Accept: application/json" \
   "$JIRA_BASE_URL/rest/api/3/issue/<issue-key>"
 ```
 
@@ -82,10 +82,12 @@ gh pr create --title "<title>" --body "<body>" --base <base-branch>
 gh issue edit <issue-number> --add-label "PR:<pr-number>"
 
 # Jira
-curl -s -X POST "$JIRA_BASE_URL/rest/api/3/issue/<issue-key>/comment" \
+# Jira v3 comment bodies must be Atlassian Document Format (ADF)
+jq -n --arg t "PR opened: <pr-url>" \
+  '{body:{type:"doc",version:1,content:[{type:"paragraph",content:[{type:"text",text:$t}]}]}}' \
+| curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/<issue-key>/comment" \
   -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"body": "PR merged: <pr-url>"}'
+  -H "Content-Type: application/json" -d @-
 ```
 
 #### Step 8: Cleanup
@@ -104,10 +106,14 @@ Fetch unresolved PR review threads, classify each, apply fixes or push back, rep
 
 #### Step 1: Fetch Unresolved Threads
 ```bash
-gh api "/repos/{owner}/{repo}/pulls/{number}/review_threads?per_page=100" \
-  | jq '.[] | select(.state != "RESOLVED")'
+# Review threads exist only in GraphQL (no REST route)
+gh api graphql -f query='
+query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
+  reviewThreads(first:100){nodes{id isResolved comments(first:1){nodes{databaseId body path line author{login}}}}}}}}' \
+  -f o={owner} -f r={repo} -F n={number} \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)'
 ```
-Record for each: `thread_id`, `path`, `line`, `comment_id`, `body`, `author`.
+Record for each: `thread_id` (GraphQL node id), `path`, `line`, `comment_id` (`databaseId`), `body`, `author`.
 
 #### Step 2: For Each Thread — Read Context
 ```bash
@@ -124,17 +130,17 @@ Classify feedback as **apply** or **pushback**:
 ```bash
 # Apply smallest correct change, add/update tests, run checks, commit
 
-# Reply to thread (CRITICAL: use in_reply_to=<comment_id>)
-gh api -X POST "/repos/{owner}/{repo}/pulls/{number}/comments" \
-  -f body="Fixed: <what changed>; tests pass (<results>)" \
-  -f in_reply_to=<comment_id>
+# Reply to thread (CRITICAL: reply on the thread's original comment_id)
+gh api -X POST "/repos/{owner}/{repo}/pulls/{number}/comments/<comment_id>/replies" \
+  -f body="Fixed: <what changed>; tests pass (<results>)"
 ```
 **Key requirement:** Reply must target the exact comment ID from the thread.
 
 #### Step 5: Resolve Thread
 ```bash
-gh api -X PATCH "/repos/{owner}/{repo}/pulls/{number}/review_threads/{thread_id}" \
-  -f resolved=true
+gh api graphql -f query='
+mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' \
+  -f id=<thread_id>
 ```
 Leave unresolved if check fails or pushback.
 
@@ -149,9 +155,9 @@ After a PR is merged, update linked work item and sync local branch.
 
 #### Step 1: Confirm Merge
 ```bash
-gh pr view <number> --json merged,mergeCommit,baseRef
+gh pr view <number> --json mergedAt,mergeCommit,baseRefName
 ```
-Continue only if `merged: true` and `mergeCommit` present. Use actual `baseRef`.
+Continue only if `mergedAt` is non-null and `mergeCommit` present. Use actual `baseRefName`.
 
 #### Step 2: Detect Issue
 ```bash
@@ -167,10 +173,11 @@ gh pr view <number> --jq '.title + .body' | grep -oE '(#[0-9]+|[A-Z]+-[0-9]+)' |
 gh issue comment <issue-number> --body "PR merged: <url>\nMerge commit: <sha>\nBase branch: <branch>"
 
 # Jira
-curl -s -X POST "$JIRA_BASE_URL/rest/api/3/issue/<issue-key>/comments" \
+jq -n --arg t "PR merged: <url> | Merge commit: <sha> | Base branch: <branch>" \
+  '{body:{type:"doc",version:1,content:[{type:"paragraph",content:[{type:"text",text:$t}]}]}}' \
+| curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/<issue-key>/comment" \
   -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"body": "PR merged: <url>\nMerge commit: <sha>\nBase branch: <branch>"}'
+  -H "Content-Type: application/json" -d @-
 ```
 
 #### Step 4: Transition Status
@@ -179,15 +186,15 @@ curl -s -X POST "$JIRA_BASE_URL/rest/api/3/issue/<issue-key>/comments" \
 gh issue edit <issue-number> --add-label "<target-status>"
 
 # Jira (via transition ID)
-PROJECT_KEY=$(echo "$ISSUE_KEY" | cut -d- -f1)
-STATUS_ID=$(curl -s "$JIRA_BASE_URL/rest/api/3/project/$PROJECT_KEY/statuses" \
+# The transitions endpoint takes a transition ID (not a status ID): list the issue's transitions and match by name
+TRANSITION_ID=$(curl -s --fail-with-body "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/transitions" \
   -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" -H "Accept: application/json" \
-  | jq -r ".[] | select(.name == \"<target-status>\") | .id")
-if [ -n "$STATUS_ID" ]; then
-  curl -s -X POST "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/transitions" \
+  | jq -r ".transitions[] | select(.name == \"<target-status>\") | .id")
+if [ -n "$TRANSITION_ID" ]; then
+  curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/transitions" \
     -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"transition\": {\"id\": \"$STATUS_ID\"}}"
+    -d "{\"transition\": {\"id\": \"$TRANSITION_ID\"}}"
 fi
 ```
 

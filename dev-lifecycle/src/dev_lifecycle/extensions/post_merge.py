@@ -3,6 +3,7 @@
 import subprocess
 import os
 import json
+import re
 from typing import Optional
 
 
@@ -43,21 +44,17 @@ class PostMergeHandler:
         return None
     
     def detect_issue_jira(self, pr_number: int) -> Optional[str]:
-        """Detect issues associated with a merged PR on Jira."""
-        # Use JIRA_PROJECT env var (required), fall back to PR number search
-        project = os.environ.get("JIRA_PROJECT", "")
-        if not project:
-            return None
-        # Run: curl -X GET https://atlassian.net/rest/api/3/issues?jql=project=PROJ
+        """Detect the Jira key referenced in the PR branch, title, or body."""
         result = subprocess.run([
-            "curl", "-s", "-X", "GET",
-            f"https://{os.environ.get('JIRA_BASE_URL', 'atlassian.net')}/rest/api/3/issues?jql=project={project}"
+            "gh", "pr", "view", str(pr_number),
+            "--repo", self.repo,
+            "--json", "headRefName,title,body"
         ], capture_output=True, text=True, check=True)
-        
-        issues = json.loads(result.stdout)
-        if issues:
-            return issues[0]["key"]
-        return None
+
+        data = json.loads(result.stdout)
+        text = " ".join(data.get(k) or "" for k in ("headRefName", "title", "body"))
+        match = re.search(r"\b[A-Z][A-Z0-9]+-\d+\b", text)
+        return match.group(0) if match else None
     
     def update_github_issue(self, issue_number: int, comment_body: str) -> bool:
         """Update a GitHub issue with a comment."""
@@ -74,7 +71,7 @@ class PostMergeHandler:
         # Jira v3 requires Atlassian Document Format
         adf_body = {"type": "doc", "version": 1, "content": [{"type": "paragraph", "content": [{"type": "text", "text": comment_body}]}]}
         result = subprocess.run([
-            "curl", "-s", "-X", "POST",
+            "curl", "-s", "--fail-with-body", "-X", "POST",
             f"{os.environ.get('JIRA_BASE_URL', 'https://atlassian.net')}/rest/api/3/issue/{issue_key}/comment",
             "-u", f"{os.environ.get('JIRA_USER_EMAIL', 'user')}:{os.environ.get('JIRA_API_TOKEN', 'token')}",
             "-H", "Content-Type: application/json",
@@ -87,7 +84,7 @@ class PostMergeHandler:
         # Fixed: Fetch transitions and match by name, then submit transition ID
         # GET /rest/api/3/issue/{issueKey}/transitions
         result = subprocess.run([
-            "curl", "-s", "-X", "GET",
+            "curl", "-s", "--fail-with-body", "-X", "GET",
             f"{os.environ.get('JIRA_BASE_URL', 'https://atlassian.net')}/rest/api/3/issue/{issue_key}/transitions",
             "-u", f"{os.environ.get('JIRA_USER_EMAIL', 'user')}:{os.environ.get('JIRA_API_TOKEN', 'token')}",
             "-H", "Accept: application/json"
@@ -102,7 +99,7 @@ class PostMergeHandler:
         
         if transition_id:
             subprocess.run([
-                "curl", "-s", "-X", "POST",
+                "curl", "-s", "--fail-with-body", "-X", "POST",
                 f"{os.environ.get('JIRA_BASE_URL', 'https://atlassian.net')}/rest/api/3/issue/{issue_key}/transitions",
                 "-u", f"{os.environ.get('JIRA_USER_EMAIL', 'user')}:{os.environ.get('JIRA_API_TOKEN', 'token')}",
                 "-H", "Content-Type: application/json",

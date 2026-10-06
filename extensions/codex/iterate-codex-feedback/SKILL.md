@@ -19,11 +19,10 @@ description: Autonomous AFK loop via GitHub CLI (`gh`). Fetches Codex feedback, 
 ### 1. Initial setup and review acknowledgement
 
 ```bash
-# Comment to trigger review
+# Comment to trigger review (top-level PR comments use the issues endpoint)
 # Replace {owner} {repo} {number} as needed
-gh api -X POST /repos/{owner}/{repo}/pulls/{number}/comments \
-  -f body='@codex review' \
-  -f in_reply_to=null
+gh api -X POST /repos/{owner}/{repo}/issues/{number}/comments \
+  -f body='@codex review'
 
 # Look for acknowledgement response (eyes emoji 👀) in the latest comment
 # This indicates the reviewer is aware and will provide feedback
@@ -32,13 +31,14 @@ gh api -X POST /repos/{owner}/{repo}/pulls/{number}/comments \
 ### 2. Check for immediate termination conditions
 
 ```bash
-# Check for thumbs-up reaction on the PR
-PR_REVIEW=$(gh api /repos/{owner}/{repo}/pulls/{number}/reviews 2>/dev/null | jq -r '.[-1].user.login + ": " + (.reactions // {} | .thumbs_up // 0 | tostring) + " thumbs_up"')
+# Count 👍 reactions on the PR itself (PR reactions live on the issues endpoint)
+THUMBS_UP=$(gh api /repos/{owner}/{repo}/issues/{number}/reactions 2>/dev/null \
+  | jq '[.[] | select(.content == "+1" and (.user.login | startswith("chatgpt-codex-connector")))] | length')
 
 # Check for any ❤️ eyes or review response reactions
 REVIEW_RESPONSE=$(gh api /repos/{owner}/{repo}/pulls/{number}/comments 2>/dev/null | jq -r '.[] | select(.body | contains("👀")) | .user.login + " acknowledged"')
 
-if [[ "$PR_REVIEW" == *"thumbs_up"* && "${PR_REVIEW#*:}" -gt 0 ]]; then
+if [[ "${THUMBS_UP:-0}" -gt 0 ]]; then
   echo "✓ Reviewer gave 👍 thumbs-up. Stopping loop."
   exit 0
 fi
@@ -48,22 +48,25 @@ if [[ -n "$REVIEW_RESPONSE" ]]; then
 fi
 ```
 
-### 3. Fetch ALL unresolved feedback threads, then delegate to @extensions/github/addree-github-pr-feedback.md
+### 3. Fetch ALL unresolved feedback threads, then delegate to @extensions/github/address-pr-feedback/SKILL.md
 
 ```bash
-# 1. Fetch ALL unresolved threads (complete list; record each thread id, path, line, body, author)
-ALL_THREADS=$(gh api "/repos/{owner}/{repo}/pulls/{number}/review_threads?per_page=100" 2>/dev/null)
-UNRESOLVED=$(echo "$ALL_THREADS" | jq '.[] | select(.state != "RESOLVED")')
-THREAD_COUNT=$(echo "$UNRESOLVED" | jq -s 'length')
+# 1. Fetch ALL unresolved threads (review threads are GraphQL-only; record each thread id, path, line, body, author)
+UNRESOLVED=$(gh api graphql -f query='
+query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
+  reviewThreads(first:100){nodes{id isResolved comments(first:1){nodes{databaseId body path line author{login}}}}}}}}' \
+  -f o={owner} -f r={repo} -F n={number} \
+  --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)]')
+THREAD_COUNT=$(echo "$UNRESOLVED" | jq 'length')
 echo "Fetched $THREAD_COUNT unresolved feedback threads (full data saved for processing)"
 
-# 2. Process every fetched thread through @extensions/github/addree-github-pr-feedback.md:
+# 2. Process every fetched thread through @extensions/github/address-pr-feedback/SKILL.md:
 #    - Read file + surrounding code at thread location
 #    - Validate correctness / security / behavior / style / perf / tests / design
 #    - Decide APPLY (smallest correct change -> test -> commit -> reply -> resolve)
 #    - Or PUSH BACK (reply with reasoning + evidence; do NOT edit/resolve; leave for HITL)
-#    - Use CLI reply: gh api -X POST .../comments -f body='...' -f in_reply_to=<comment_id>
-#    - Resolve addressed: gh api -X PATCH .../review_threads/{thread_id} -f resolved=true
+#    - Use CLI reply: gh api -X POST .../pulls/{number}/comments/<comment_id>/replies -f body='...'
+#    - Resolve addressed: gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id=<thread_id>
 #    - Leave pushed-back unresolved (HITL); summarize reasoning
 ```
 
@@ -73,7 +76,7 @@ echo "Fetched $THREAD_COUNT unresolved feedback threads (full data saved for pro
 For each **valid** feedback:
 
 ```bash
-# Apply smallest correct change (using addree-github-pr-feedback approach)
+# Apply smallest correct change (using address-pr-feedback approach)
 # Add/update focused tests
 # Run relevant checks
 # Commit related changes
@@ -128,8 +131,8 @@ The loop stops when ANY of these conditions is met:
 
 #### Condition B: Clean feedback
 ```bash
-# Current head has zero actionable comments from reviewer
-# Check: gh api /repos/{owner}/{repo}/pulls/{number}/reviews | jq 'length == 0'
+# No unresolved review threads remain (the historical review count never returns to 0)
+# Check: the GraphQL fetch from step 3 returns THREAD_COUNT == 0
 ```
 
 #### Condition C: Codex pushback needs HITL
@@ -151,8 +154,8 @@ The loop stops when ANY of these conditions is met:
 # Get latest commit ID
 current_commit=$(gh api /repos/{owner}/{repo}/pulls/{number} | jq -r '.head.sha')
 
-# Fetch review threads for current commit
-review_threads=$(gh api /repos/{owner}/{repo}/pulls/{number}/review_threads?per_page=100)
+# Fetch review threads (GraphQL only) — see the query in step 3
+review_threads="$UNRESOLVED"
 
 # Get comments on PR
 comments=$(gh api /repos/{owner}/{repo}/pulls/{number}/comments)

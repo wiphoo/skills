@@ -1,6 +1,6 @@
 # gh-discussion-manager — Reference
 
-Linked workflow: `extensions/github/addree-github-pr-feedback.md`
+Linked workflow: `extensions/github/address-pr-feedback/SKILL.md`
 
 ## Step-by-step commands
 
@@ -31,4 +31,4 @@ Read file at comment location; classify (correctness / security / behavior / sty
 
 ### 6. Emoji/status
 - `gh api repos/{o}/{r}/issues/{pr}/reactions --jq '.[] | {content:.content, user:.user.login}'`
-- `gh pr view {pr} --json reviews,reactions`
+- `gh pr view {pr} --json reviews,reactionGroups`

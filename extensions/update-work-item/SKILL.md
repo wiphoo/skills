@@ -51,6 +51,9 @@ if echo "$ISSUE_REF" | grep -qE '^[A-Z]+-[0-9]+$'; then
 elif echo "$ISSUE_REF" | grep -qE '#[0-9]+'; then
   TRACKER="github"
   GITHUB_ISSUE=$(echo "$ISSUE_REF" | grep -oE '#[0-9]+' | tr -d '#')
+  # Keep the repo from `owner/repo#42`; bare `#42` uses the current repo
+  GITHUB_REPO=$(echo "$ISSUE_REF" | grep -oE '^[^/#]+/[^#]+' || true)
+  GH_REPO=(); [[ -n "$GITHUB_REPO" ]] && GH_REPO=(--repo "$GITHUB_REPO")
 else
   echo "❌ Cannot determine tracker from: $ISSUE_REF"
   exit 1
@@ -62,10 +65,11 @@ fi
 #### Jira (curl)
 
 ```bash
-curl -s -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/comments" \
+jq -n --arg t "$COMMENT_BODY" \
+  '{body:{type:"doc",version:1,content:[{type:"paragraph",content:[{type:"text",text:$t}]}]}}' \
+| curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/comment" \
   -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d "{\"body\": \"$COMMENT_BODY\"}"
+  -H "Content-Type: application/json" -d @-
 ```
 
 Works for any issue type — story, task, sub-task, bug, epic.
@@ -73,7 +77,7 @@ Works for any issue type — story, task, sub-task, bug, epic.
 #### GitHub (gh)
 
 ```bash
-gh issue comment "$GITHUB_ISSUE" --body "$COMMENT_BODY"
+gh issue comment "$GITHUB_ISSUE" "${GH_REPO[@]}" --body "$COMMENT_BODY"
 ```
 
 ### 3. Change status / state
@@ -117,14 +121,14 @@ Update label or close/reopen (state change):
 ```bash
 # Add label (acts as state marker if using labels for status)
 if [[ -n "$TARGET_STATUS" ]]; then
-  gh issue edit "$GITHUB_ISSUE" --add-label "$TARGET_STATUS"
+  gh issue edit "$GITHUB_ISSUE" "${GH_REPO[@]}" --add-label "$TARGET_STATUS"
 fi
 
 # Close / reopen (direct state change)
 if [[ "$TARGET_STATUS" == "done" || "$TARGET_STATUS" == "closed" ]]; then
-  gh issue close "$GITHUB_ISSUE"
+  gh issue close "$GITHUB_ISSUE" "${GH_REPO[@]}"
 elif [[ "$TARGET_STATUS" == "reopen" ]]; then
-  gh issue reopen "$GITHUB_ISSUE"
+  gh issue reopen "$GITHUB_ISSUE" "${GH_REPO[@]}"
 fi
 ```
 
@@ -140,7 +144,7 @@ curl -s "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE" \
   -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" | jq '{key, fields: {issuetype: .fields.issuetype.name, status: .fields.status.name, summary: .fields.summary}}'
 
 # GitHub — get issue state
-gh issue view "$GITHUB_ISSUE" --json number,title,state,labels,body
+gh issue view "$GITHUB_ISSUE" "${GH_REPO[@]}" --json number,title,state,labels,body
 ```
 
 ---

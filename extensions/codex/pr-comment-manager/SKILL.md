@@ -50,4 +50,4 @@ Always include what changed and exact check results.
 
 ---
 
-See `@extensions/github/addree-github-pr-feedback.md` for the full workflow including commit conventions and linked work-item updates.
+See `@extensions/github/address-pr-feedback/SKILL.md` for the full workflow including commit conventions and linked work-item updates.
