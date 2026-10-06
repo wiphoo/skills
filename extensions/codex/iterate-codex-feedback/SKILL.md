@@ -84,7 +84,7 @@ For each **valid** feedback:
 # Resolve thread when fully addressed
 
 # Push new commit
-# gh push origin <branch>
+# git push origin <branch>   (gh has no push subcommand)
 ```
 
 ### 5. Push-back handling (Human-in-the-loop)
@@ -131,8 +131,11 @@ The loop stops when ANY of these conditions is met:
 
 #### Condition B: Clean feedback
 ```bash
-# No unresolved review threads remain (the historical review count never returns to 0)
-# Check: the GraphQL fetch from step 3 returns THREAD_COUNT == 0
+# No unresolved threads AND Codex has reviewed the pushed head (zero threads right after a push proves nothing)
+HEAD_SHA=$(git rev-parse HEAD)
+REVIEWED=$(gh api /repos/{owner}/{repo}/pulls/{number}/reviews \
+  --jq "[.[] | select(.user.login | startswith(\"chatgpt-codex-connector\")) | select(.commit_id == \"$HEAD_SHA\")] | length")
+# Clean only when THREAD_COUNT == 0 (GraphQL fetch from step 3, re-run after the review) and REVIEWED > 0
 ```
 
 #### Condition C: Codex pushback needs HITL
@@ -161,7 +164,7 @@ review_threads="$UNRESOLVED"
 comments=$(gh api /repos/{owner}/{repo}/pulls/{number}/comments)
 
 # Get PR reactions
-pr_reactions=$(gh api /repos/{owner}/{repo}/pulls/{number}/reactions)
+pr_reactions=$(gh api /repos/{owner}/{repo}/issues/{number}/reactions)
 
 # Get user's review on current commit
 user_review=$(gh api /repos/{owner}/{repo}/pulls/{number}/reviews | jq -r '.[] | select(.user.login == "target_reviewer")')

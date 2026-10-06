@@ -63,12 +63,15 @@ class JiraTaskCoding:
     def link_pr(self, jira_key: str, pr_url: str) -> None:
         """Link PR to Jira issue via comment."""
         import subprocess
+        # Jira v3 comment bodies must be Atlassian Document Format
+        adf = {"type": "doc", "version": 1, "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": f"PR opened: {pr_url}"}]}]}
         subprocess.run([
-            "curl", "-s", "-X", "POST",
+            "curl", "-s", "--fail-with-body", "-X", "POST",
             f"{os.environ.get('JIRA_BASE_URL', 'https://atlassian.net')}/rest/api/3/issue/{jira_key}/comment",
             "-u", f"{os.environ.get('JIRA_USER_EMAIL', 'user')}:" + os.environ.get('JIRA_API_TOKEN', 'token'),
             "-H", "Content-Type: application/json",
-            "-d", json.dumps({"body": f"PR merged: {pr_url}"})
+            "-d", json.dumps({"body": adf})
         ], check=True)
 
 

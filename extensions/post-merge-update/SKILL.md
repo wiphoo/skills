@@ -105,17 +105,17 @@ fi
 
 #### 4.2 GitHub Issues update (gh)
 
-Add comment:
+The issue lives in the PR's repository, which may differ from the current checkout. Pass it explicitly (`<owner/repo>` is the repository resolved in step 1) on every issue command:
 
 ```bash
-gh issue comment <issue_number> --body "PR merged: <URL>\nMerge commit: <COMMIT>\nBase branch: <BASE_BRANCH>"
+gh issue comment <issue_number> --repo <owner/repo> --body "PR merged: <URL>\nMerge commit: <COMMIT>\nBase branch: <BASE_BRANCH>"
 ```
 
 Update status via label or field (if using GitHub Projects):
 
 ```bash
 if [[ -n "$TARGET_STATUS" ]]; then
-  gh issue edit <issue_number> --add-label "$TARGET_STATUS"
+  gh issue edit <issue_number> --repo <owner/repo> --add-label "$TARGET_STATUS"
 fi
 ```
 

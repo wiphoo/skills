@@ -34,7 +34,8 @@ class TestTaskCoding(unittest.TestCase):
         cmd = mock_run.call_args[0][0]
         self.assertIn("https://company.atlassian.net/rest/api/3/issue/PROJ-1/comment", cmd)
         self.assertEqual(cmd[cmd.index("-u") + 1], "user@company.com:test-token")
-        self.assertIn("body", json.loads(cmd[cmd.index("-d") + 1]))
+        self.assertIn("--fail-with-body", cmd)
+        self.assertEqual(json.loads(cmd[cmd.index("-d") + 1])["body"]["type"], "doc")
 
 
 if __name__ == "__main__":
