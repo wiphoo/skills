@@ -135,8 +135,9 @@ The loop stops when ANY of these conditions is met:
 ```bash
 # No unresolved threads AND Codex has reviewed the pushed head (zero threads right after a push proves nothing)
 HEAD_SHA=$(git rev-parse HEAD)
-REVIEWED=$(gh api /repos/{owner}/{repo}/pulls/{number}/reviews \
-  --jq "[.[] | select(.user.login | startswith(\"chatgpt-codex-connector\")) | select(.commit_id == \"$HEAD_SHA\")] | length")
+# --paginate: the reviews endpoint returns 30 per page; emit one line per match and count them across all pages
+REVIEWED=$(gh api --paginate /repos/{owner}/{repo}/pulls/{number}/reviews \
+  --jq ".[] | select(.user.login | startswith(\"chatgpt-codex-connector\")) | select(.commit_id == \"$HEAD_SHA\") | .id" | wc -l)
 # Clean only when THREAD_COUNT == 0 (GraphQL fetch from step 3, re-run after the review) and REVIEWED > 0
 ```
 

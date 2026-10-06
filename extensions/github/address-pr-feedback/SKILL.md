@@ -16,14 +16,14 @@ No MCP required — use `gh` and the REST API directly.
 2. **Fetch unresolved feedback**
    - Review threads exist only in GraphQL (there is no REST `review_threads` route):
      ```bash
-     gh api graphql -f query='
-     query($o:String!,$r:String!,$n:Int!,$after:String){repository(owner:$o,name:$r){pullRequest(number:$n){
-       reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor}
+     gh api graphql --paginate -f query='
+     query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){
+       reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
          nodes{id isResolved comments(first:1){nodes{databaseId body path line author{login}}}}}}}}' \
        -f o={owner} -f r={repo} -F n={number} \
        --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)'
      ```
-     Repeat with `-f after=<endCursor>` while `hasNextPage` is true.
+     `--paginate` follows `pageInfo`/`$endCursor` for you, so threads past the first 100 are included.
    - Record for each: thread id (GraphQL node id), path/line, original comment id (`databaseId`), body, author.
 
 3. **Validate every comment**

@@ -111,17 +111,18 @@ fi
 
 #### 4.2 GitHub Issues update (gh)
 
-The issue lives in the PR's repository, which may differ from the current checkout. Pass it explicitly (`<owner/repo>` is the repository resolved in step 1) on every issue command:
+The issue may live in a different repository than the current checkout. Choose `ISSUE_REPO` once and pass it on every issue command: the repository from an explicit issue URL or `owner/repo#N` when one was supplied (never replace it with the PR's repository), otherwise the PR's repository resolved in step 1:
 
 ```bash
-gh issue comment <issue_number> --repo <owner/repo> --body "PR merged: <URL>\nMerge commit: <COMMIT>\nBase branch: <BASE_BRANCH>"
+ISSUE_REPO="<owner/repo>"   # explicit issue URL / owner/repo#N repo if given, else the PR's repo
+gh issue comment <issue_number> --repo "$ISSUE_REPO" --body "PR merged: <URL>\nMerge commit: <COMMIT>\nBase branch: <BASE_BRANCH>"
 ```
 
 Update status via label or field (if using GitHub Projects):
 
 ```bash
 if [[ -n "$TARGET_STATUS" ]]; then
-  gh issue edit <issue_number> --repo <owner/repo> --add-label "$TARGET_STATUS"
+  gh issue edit <issue_number> --repo "$ISSUE_REPO" --add-label "$TARGET_STATUS"
 fi
 ```
 

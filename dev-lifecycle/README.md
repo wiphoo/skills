@@ -73,9 +73,9 @@ This umbrella skill provides three deterministic subcommands that guide a code c
 **Steps:**
 
 1. **Confirm Merge** — `gh pr view <number> --json mergedAt,mergeCommit,baseRefName`; continue only if `mergedAt` is non-null and `mergeCommit` present
-2. **Detect Issue** — extract issue number/key from PR title/body: `gh pr view <number> --json title,body --jq '.title + .body' | grep -oE '(#[0-9]+|[A-Z]+-[0-9]+)' | head -1`
+2. **Detect Issue** — prefer `gh pr view <number> --json closingIssuesReferences`; otherwise list every distinct match in title/body (`… | grep -oE '(#[0-9]+|[A-Z]+-[0-9]+)' | sort -u`) and stop unless exactly one remains
 3. **Update Comments** — GitHub: `gh issue comment <number> --body "PR merged: <url>\nMerge commit: <sha>\nBase branch: <branch>"`; Jira: post comment via REST
-4. **Transition Status** — GitHub: add label; Jira: resolve transition via REST using project key and status ID
+4. **Transition Status** — GitHub: add label; Jira: list the issue's `/transitions`, match by name, and submit that transition ID (not a status ID)
 5. **Sync Local Branch** — `git switch <base-branch>` then `git pull --ff-only`
 
 ---
