@@ -68,13 +68,24 @@ Detect source:
 If ambiguous, ask rather than guess. Prefer GitHub's closing references; otherwise collect every distinct match and stop unless exactly one remains (a PR saying `Related #10 … Fixes #20` must not silently pick `#10`):
 
 ```bash
-CLOSING=$(gh pr view <number> --json closingIssuesReferences --jq '.closingIssuesReferences[] | "\(.repository.owner.login)/\(.repository.name)#\(.number)"')
-CANDIDATES=${CLOSING:-$(gh pr view <number> --json title,body --jq '.title + " " + .body' \
-  | grep -oE '([A-Z][A-Z0-9]+-[0-9]+|([[:alnum:]_.-]+/[[:alnum:]_.-]+)?#[0-9]+)' | sort -u)}
-if [[ $(echo "$CANDIDATES" | grep -c .) -ne 1 ]]; then
-  echo "❌ Ambiguous or missing work item (candidates: ${CANDIDATES:-none}). Ask the user."; exit 1
+# 1. An explicitly supplied work item (quick start `Work item:`) always wins over inference.
+#    WORK_ITEM may be PROJ-123, #42, owner/repo#42, a GitHub issue URL, or a Jira /browse/ URL.
+if [[ -n "${WORK_ITEM:-}" ]]; then
+  case "$WORK_ITEM" in
+    https://github.com/*/issues/*) ISSUE_REF=$(echo "$WORK_ITEM" | sed -E 's|https://github\.com/([^/]+/[^/]+)/issues/([0-9]+).*|\1#\2|') ;;
+    */browse/*)                    ISSUE_REF=$(echo "$WORK_ITEM" | sed -E 's|.*/browse/([A-Z][A-Z0-9]+-[0-9]+).*|\1|') ;;
+    *)                             ISSUE_REF="$WORK_ITEM" ;;
+  esac
+else
+  # 2. Otherwise infer it from the PR: closing references first, then every distinct match
+  CLOSING=$(gh pr view <number> --json closingIssuesReferences --jq '.closingIssuesReferences[] | "\(.repository.owner.login)/\(.repository.name)#\(.number)"')
+  CANDIDATES=${CLOSING:-$(gh pr view <number> --json title,body --jq '.title + " " + .body' \
+    | grep -oE '([A-Z][A-Z0-9]+-[0-9]+|([[:alnum:]_.-]+/[[:alnum:]_.-]+)?#[0-9]+)' | sort -u)}
+  if [[ $(echo "$CANDIDATES" | grep -c .) -ne 1 ]]; then
+    echo "❌ Ambiguous or missing work item (candidates: ${CANDIDATES:-none}). Ask the user."; exit 1
+  fi
+  ISSUE_REF="$CANDIDATES"
 fi
-ISSUE_REF="$CANDIDATES"
 # A reference like owner/repo#42 keeps its own repository; a bare #42 belongs to the PR's repository
 if [[ "$ISSUE_REF" == */*#* ]]; then ISSUE_REPO="${ISSUE_REF%%#*}"; else ISSUE_REPO="<PR owner/repo>"; fi
 ```
@@ -93,21 +104,27 @@ jq -n --arg t "PR merged: <URL> | Merge commit: <COMMIT> | Base branch: <BASE_BR
   -H "Content-Type: application/json" -d @-
 ```
 
-Transition status if target supplied:
+Transition status only if a target was supplied (`TARGET_STATUS` non-empty) — a comment-only update must not call the transitions endpoint:
 
 ```bash
-# The transitions endpoint takes a transition ID, not a status ID
-TRANSITIONS=$(curl -s --fail-with-body "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
-  -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" -H "Accept: application/json")
-TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r ".transitions[] | select(.name == \"$TARGET_STATUS\") | .id")
-if [[ -n "$TRANSITION_ID" ]]; then
-  curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
-    -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{\"transition\": {\"id\": \"$TRANSITION_ID\"}}"
-  echo "✅ Issue $JIRA_ISSUE transitioned to $TARGET_STATUS"
-else
-  echo "⚠️ Target status \"$TARGET_STATUS\" not found."
+if [[ -n "$TARGET_STATUS" ]]; then
+  # The transitions endpoint takes a transition ID, not a status ID
+  TRANSITIONS=$(curl -s --fail-with-body "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
+    -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" -H "Accept: application/json")
+  TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r ".transitions[] | select(.name == \"$TARGET_STATUS\") | .id")
+  if [[ -n "$TRANSITION_ID" ]]; then
+    # Bash does not stop on curl's error 22 (--fail-with-body); test its status before reporting success
+    if curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
+      -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{\"transition\": {\"id\": \"$TRANSITION_ID\"}}"; then
+      echo "✅ Issue $JIRA_ISSUE transitioned to $TARGET_STATUS"
+    else
+      echo "❌ Jira rejected the transition to $TARGET_STATUS"; exit 1
+    fi
+  else
+    echo "⚠️ Target status \"$TARGET_STATUS\" not found."
+  fi
 fi
 ```
 

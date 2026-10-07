@@ -9,12 +9,28 @@ description: Autonomous AFK loop via GitHub CLI (`gh`). Fetches Codex feedback, 
 
 ## AFK quick start (run once, loop autonomously)
 
-1. Set environment / target PR; run this once — loop continues in background (`nohup`, `screen`, `tmux`).
+1. Set environment / target PR; verify the local checkout is that PR's head (step 0); run this once — loop continues in background (`nohup`, `screen`, `tmux`).
 2. Agent auto-posts `@codex review`, detects 👀 acknowledgement, then enters loop.
 3. Each round is fully automatic: fetch → triage → apply / pushback → reply → resolve / leave-unresolved → push.
 4. Loop exits automatically on: 👍 thumbs-up, clean review, blocked check failure, or Codex HITL pushback.
 
 ## Step-by-step loop
+
+### 0. Verify the local checkout is the PR head
+
+API calls inspect the selected PR, but edits, commits and the push act on the current checkout. Check
+the checkout BEFORE replying to or resolving anything, or fixes can land on the wrong branch:
+
+```bash
+# Run from a clean checkout of the PR's repository
+git diff --quiet && git diff --cached --quiet || { echo "❌ Dirty worktree — stash or commit first"; exit 1; }
+PR_HEAD_SHA=$(gh pr view {number} --json headRefOid --jq .headRefOid)
+if [[ "$(git rev-parse HEAD)" != "$PR_HEAD_SHA" ]]; then
+  # `gh pr checkout` checks out the PR branch and sets its upstream, so a plain `git push` updates the PR
+  gh pr checkout {number} || { echo "❌ Cannot check out PR #{number}"; exit 1; }
+  [[ "$(git rev-parse HEAD)" == "$PR_HEAD_SHA" ]] || { echo "❌ Local branch is not at the PR head (pull first)"; exit 1; }
+fi
+```
 
 ### 1. Initial setup and review acknowledgement
 
@@ -105,7 +121,7 @@ For each **valid** feedback:
 # Resolve thread when fully addressed
 
 # Push new commit
-# git push origin <branch>   (gh has no push subcommand)
+# git push   (the checkout from step 0 tracks the PR branch; gh has no push subcommand)
 
 # Ask for a review of the new head. Without automatic review-on-push nothing else triggers one,
 # and Condition B waits for a review of this exact commit. Capture REQUESTED_AT first (see step 1).
