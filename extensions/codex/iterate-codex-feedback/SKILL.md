@@ -19,13 +19,16 @@ description: Autonomous AFK loop via GitHub CLI (`gh`). Fetches Codex feedback, 
 ### 1. Initial setup and review acknowledgement
 
 ```bash
+# PR reactions persist across commits, so remember when THIS review was requested (step 2 only
+# accepts a 👍 created at or after this). Capture it BEFORE posting: GitHub timestamps have
+# one-second resolution, so a 👍 landing right after the request must not look older than the
+# boundary. Re-do both lines every time a review is requested again (step 4).
+REQUESTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
 # Comment to trigger review (top-level PR comments use the issues endpoint)
 # Replace {owner} {repo} {number} as needed
 gh api -X POST /repos/{owner}/{repo}/issues/{number}/comments \
   -f body='@codex review'
-# PR reactions persist across commits, so remember when THIS review was requested (step 2 only
-# accepts a 👍 newer than this); re-set it every time `@codex review` is posted again (step 4)
-REQUESTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # Look for acknowledgement response (eyes emoji 👀) in the latest comment
 # This indicates the reviewer is aware and will provide feedback
@@ -35,15 +38,16 @@ REQUESTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 ```bash
 # Count 👍 reactions on the PR itself (PR reactions live on the issues endpoint)
-# --paginate (default page is 30); only count a 👍 created after the current review request, so a
-# 👍 left from an earlier head does not end the loop before the new head is reviewed
+# --paginate (default page is 30); only count a 👍 created at/after the current review request
+# (>= REQUESTED_AT), so a 👍 left from an earlier head does not end the loop before the new head is
+# reviewed. The stale test below is the exact complement (< REQUESTED_AT), so every +1 is one or the other.
 THUMBS_UP=$(gh api --paginate /repos/{owner}/{repo}/issues/{number}/reactions 2>/dev/null \
-  --jq ".[] | select(.content == \"+1\" and (.user.login | startswith(\"chatgpt-codex-connector\")) and .created_at > \"$REQUESTED_AT\") | .id" | wc -l)
+  --jq ".[] | select(.content == \"+1\" and (.user.login | startswith(\"chatgpt-codex-connector\")) and .created_at >= \"$REQUESTED_AT\") | .id" | wc -l)
 # GitHub returns the EXISTING reaction (old created_at) instead of creating a second +1 from the same
 # user, so once a +1 exists it can never signal a later approval. If one predates this request, ignore
 # reactions entirely and rely on Condition B (Codex review of the current head + no unresolved threads).
 STALE_THUMBS_UP=$(gh api --paginate /repos/{owner}/{repo}/issues/{number}/reactions 2>/dev/null \
-  --jq ".[] | select(.content == \"+1\" and (.user.login | startswith(\"chatgpt-codex-connector\")) and .created_at <= \"$REQUESTED_AT\") | .id" | wc -l)
+  --jq ".[] | select(.content == \"+1\" and (.user.login | startswith(\"chatgpt-codex-connector\")) and .created_at < \"$REQUESTED_AT\") | .id" | wc -l)
 
 # Check for any ❤️ eyes or review response reactions
 REVIEW_RESPONSE=$(gh api /repos/{owner}/{repo}/pulls/{number}/comments 2>/dev/null | jq -r '.[] | select(.body | contains("👀")) | .user.login + " acknowledged"')
@@ -104,9 +108,9 @@ For each **valid** feedback:
 # git push origin <branch>   (gh has no push subcommand)
 
 # Ask for a review of the new head. Without automatic review-on-push nothing else triggers one,
-# and Condition B waits for a review of this exact commit.
+# and Condition B waits for a review of this exact commit. Capture REQUESTED_AT first (see step 1).
+# REQUESTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # gh api -X POST /repos/{owner}/{repo}/issues/{number}/comments -f body='@codex review'
-# REQUESTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)   # step 2's 👍 check must postdate this request
 ```
 
 ### 5. Push-back handling (Human-in-the-loop)
