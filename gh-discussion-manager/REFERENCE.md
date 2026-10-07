@@ -10,7 +10,7 @@ Linked workflow: `extensions/github/address-pr-feedback/SKILL.md`
 - `gh pr view {pr} --json url,reviews,comments`
 
 ### 2. Fetch unresolved feedback
-- GraphQL (review threads have no REST route): `gh api graphql --paginate` over `pullRequest.reviewThreads { pageInfo { hasNextPage endCursor } nodes { id isResolved comments(first:50) { nodes { databaseId path body } } } }`
+- GraphQL (review threads have no REST route): `gh api graphql --paginate` over `pullRequest.reviewThreads { pageInfo { hasNextPage endCursor } nodes { id isResolved root: comments(first:1) { nodes { databaseId path body } } latest: comments(last:1) { nodes { databaseId createdAt body } } } }`
   Filter: `.isResolved | not` (see `scripts/gh-discuss.sh` for a working query)
 
 Record: thread id, diff hunk, path/line, original comment id, body, author.

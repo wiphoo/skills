@@ -35,7 +35,7 @@ class TestPostMerge(unittest.TestCase):
     @patch("subprocess.run")
     def test_detect_issue_github(self, mock_run):
         mock_run.return_value.stdout = '{"closingIssuesReferences": [{"number": 42}]}'
-        self.assertEqual(self.h.detect_issue_github(456), 42)
+        self.assertEqual(self.h.detect_issue_github(456), ("user/repo", 42))  # no repo info -> PR's repo
 
     @patch("subprocess.run")
     def test_detect_issue_github_rejects_multiple_closing_issues(self, mock_run):
@@ -47,7 +47,7 @@ class TestPostMerge(unittest.TestCase):
     def test_detect_issue_github_falls_back_to_title_body_reference(self, mock_run):
         mock_run.return_value.stdout = json.dumps(
             {"closingIssuesReferences": [], "title": "Add thing", "body": "Related #42"})
-        self.assertEqual(self.h.detect_issue_github(456), 42)
+        self.assertEqual(self.h.detect_issue_github(456), ("user/repo", 42))
 
     @patch("subprocess.run")
     def test_detect_issue_github_fallback_rejects_multiple_and_none(self, mock_run):
@@ -63,7 +63,35 @@ class TestPostMerge(unittest.TestCase):
     def test_detect_issue_github_closing_reference_wins_over_mentions(self, mock_run):
         mock_run.return_value.stdout = json.dumps(
             {"closingIssuesReferences": [{"number": 7}], "title": "Related #10", "body": "x"})
-        self.assertEqual(self.h.detect_issue_github(456), 7)
+        self.assertEqual(self.h.detect_issue_github(456), ("user/repo", 7))
+
+    @patch("subprocess.run")
+    def test_detect_issue_github_keeps_cross_repo_closing_reference(self, mock_run):
+        mock_run.return_value.stdout = json.dumps({"closingIssuesReferences": [
+            {"number": 42, "url": "https://github.com/owner/other-repo/issues/42"}]})
+        self.assertEqual(self.h.detect_issue_github(456), ("owner/other-repo", 42))
+
+    @patch("subprocess.run")
+    def test_detect_issue_github_same_number_in_two_repos_is_ambiguous(self, mock_run):
+        mock_run.return_value.stdout = json.dumps({"closingIssuesReferences": [
+            {"number": 42, "url": "https://github.com/user/repo/issues/42"},
+            {"number": 42, "url": "https://github.com/owner/other-repo/issues/42"}]})
+        with self.assertRaises(ValueError):
+            self.h.detect_issue_github(456)
+
+    @patch("subprocess.run")
+    def test_detect_issue_github_fallback_keeps_qualified_mention(self, mock_run):
+        mock_run.return_value.stdout = json.dumps(
+            {"closingIssuesReferences": [], "title": "t", "body": "Fixes owner/other-repo#42"})
+        self.assertEqual(self.h.detect_issue_github(456), ("owner/other-repo", 42))
+
+    @patch("subprocess.run")
+    def test_update_github_issue_targets_given_repo(self, mock_run):
+        mock_run.return_value.returncode = 0
+        self.h.update_github_issue(42, "merged", repo="owner/other-repo")
+        self.assertIn("repos/owner/other-repo/issues/42/comments", mock_run.call_args[0][0])
+        self.h.update_github_issue(42, "merged")
+        self.assertIn("repos/user/repo/issues/42/comments", mock_run.call_args[0][0])
 
     @patch("subprocess.run")
     def test_detect_issue_jira_rejects_multiple_keys(self, mock_run):

@@ -68,13 +68,15 @@ Detect source:
 If ambiguous, ask rather than guess. Prefer GitHub's closing references; otherwise collect every distinct match and stop unless exactly one remains (a PR saying `Related #10 … Fixes #20` must not silently pick `#10`):
 
 ```bash
-CLOSING=$(gh pr view <number> --json closingIssuesReferences --jq '.closingIssuesReferences[] | "#\(.number)"')
+CLOSING=$(gh pr view <number> --json closingIssuesReferences --jq '.closingIssuesReferences[] | "\(.repository.owner.login)/\(.repository.name)#\(.number)"')
 CANDIDATES=${CLOSING:-$(gh pr view <number> --json title,body --jq '.title + " " + .body' \
-  | grep -oE '([A-Z]+-[0-9]+|#[0-9]+)' | sort -u)}
+  | grep -oE '([A-Z]+-[0-9]+|([[:alnum:]_.-]+/[[:alnum:]_.-]+)?#[0-9]+)' | sort -u)}
 if [[ $(echo "$CANDIDATES" | grep -c .) -ne 1 ]]; then
   echo "❌ Ambiguous or missing work item (candidates: ${CANDIDATES:-none}). Ask the user."; exit 1
 fi
 ISSUE_REF="$CANDIDATES"
+# A reference like owner/repo#42 keeps its own repository; a bare #42 belongs to the PR's repository
+if [[ "$ISSUE_REF" == */*#* ]]; then ISSUE_REPO="${ISSUE_REF%%#*}"; else ISSUE_REPO="<PR owner/repo>"; fi
 ```
 
 ### 4. Update the source record
@@ -114,7 +116,7 @@ fi
 The issue may live in a different repository than the current checkout. Choose `ISSUE_REPO` once and pass it on every issue command: the repository from an explicit issue URL or `owner/repo#N` when one was supplied (never replace it with the PR's repository), otherwise the PR's repository resolved in step 1:
 
 ```bash
-ISSUE_REPO="<owner/repo>"   # explicit issue URL / owner/repo#N repo if given, else the PR's repo
+# ISSUE_REPO was set in step 3: the repo of an owner/repo#N reference or explicit issue URL, else the PR's repo
 gh issue comment <issue_number> --repo "$ISSUE_REPO" --body "PR merged: <URL>\nMerge commit: <COMMIT>\nBase branch: <BASE_BRANCH>"
 ```
 

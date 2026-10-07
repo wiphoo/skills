@@ -4,7 +4,7 @@ import subprocess
 import os
 import json
 import re
-from typing import Optional
+from typing import Optional, Tuple
 
 
 class PostMergeHandler:
@@ -28,9 +28,25 @@ class PostMergeHandler:
         merged = data.get("mergedAt") is not None
         return merged
     
-    def detect_issue_github(self, pr_number: int) -> Optional[int]:
-        """Detect issues associated with a merged PR on GitHub."""
-        # Use gh pr view --json closingIssuesReferences (supported v3 field)
+    # `owner/repo#N` or bare `#N` (the PR's own repository)
+    _ISSUE_REF = re.compile(r"(?<![\w/#.-])((?:[\w.-]+/[\w.-]+)?)#(\d+)\b")
+
+    def _closing_ref_repo(self, ref: dict) -> str:
+        """Repository a closing reference belongs to (url first, then repository object)."""
+        m = re.match(r"https://github\.com/([^/]+/[^/]+)/", ref.get("url") or "")
+        if m:
+            return m.group(1)
+        repo = ref.get("repository") or {}
+        if repo.get("name") and (repo.get("owner") or {}).get("login"):
+            return f"{repo['owner']['login']}/{repo['name']}"
+        return self.repo
+
+    def detect_issue_github(self, pr_number: int) -> Optional[Tuple[str, int]]:
+        """Detect the (owner/repo, number) of the issue linked to a PR on GitHub.
+
+        The repository is kept because a PR can close an issue in another repository and
+        the same number can exist in several; pass it to update_github_issue(repo=...).
+        """
         result = subprocess.run([
             "gh", "pr", "view", str(pr_number),
             "--repo", self.repo,
@@ -38,15 +54,16 @@ class PostMergeHandler:
         ], capture_output=True, text=True, check=True)
 
         data = json.loads(result.stdout)
-        # Prefer GitHub's closing references; fall back to any #N mentioned in the title/body
-        numbers = sorted({r["number"] for r in data.get("closingIssuesReferences", [])})
-        if not numbers:
+        # Prefer GitHub's closing references; fall back to any [owner/repo]#N in the title/body
+        refs = {(self._closing_ref_repo(r), r["number"]) for r in data.get("closingIssuesReferences", [])}
+        if not refs:
             text = f"{data.get('title') or ''} {data.get('body') or ''}"
-            numbers = sorted({int(n) for n in re.findall(r"(?<![\w/])#(\d+)\b", text)})
-        if len(numbers) > 1:
-            raise ValueError(f"ambiguous: PR references multiple issues {numbers}; choose one explicitly")
-        return numbers[0] if numbers else None
-    
+            refs = {(repo or self.repo, int(n)) for repo, n in self._ISSUE_REF.findall(text)}
+        if len(refs) > 1:
+            found = sorted(f"{r}#{n}" for r, n in refs)
+            raise ValueError(f"ambiguous: PR references multiple issues {found}; choose one explicitly")
+        return next(iter(refs)) if refs else None
+
     def detect_issue_jira(self, pr_number: int) -> Optional[str]:
         """Detect the Jira key referenced in the PR branch, title, or body."""
         result = subprocess.run([
@@ -62,12 +79,11 @@ class PostMergeHandler:
             raise ValueError(f"ambiguous: PR references multiple Jira keys {keys}; choose one explicitly")
         return keys[0] if keys else None
     
-    def update_github_issue(self, issue_number: int, comment_body: str) -> bool:
-        """Update a GitHub issue with a comment."""
-        # Fixed: Use issue number (not PR number) for issue comments
+    def update_github_issue(self, issue_number: int, comment_body: str, repo: Optional[str] = None) -> bool:
+        """Comment on a GitHub issue in `repo` (default: the PR's repository)."""
         result = subprocess.run([
             "gh", "api", "-X", "POST",
-            f"repos/{self.repo}/issues/{issue_number}/comments",
+            f"repos/{repo or self.repo}/issues/{issue_number}/comments",
             "-f", f"body={comment_body}"
         ], capture_output=True, text=True, check=True)
         return result.returncode == 0

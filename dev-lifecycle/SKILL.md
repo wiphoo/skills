@@ -110,7 +110,7 @@ Fetch unresolved PR review threads, classify each, apply fixes or push back, rep
 gh api graphql --paginate -f query='
 query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){
   reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
-    nodes{id isResolved comments(first:50){nodes{databaseId body path line author{login}}}}}}}}' \
+    nodes{id isResolved root:comments(first:1){nodes{databaseId body path line author{login}}} latest:comments(last:1){nodes{databaseId createdAt body author{login}}}}}}}}' \
   -f o={owner} -f r={repo} -F n={number} \
   --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)'
 ```
@@ -163,8 +163,8 @@ Continue only if `mergedAt` is non-null and `mergeCommit` present. Use actual `b
 #### Step 2: Detect Issue
 ```bash
 # GitHub: prefer closing references, else every distinct match in title/body; stop unless exactly one
-gh pr view <number> --json closingIssuesReferences --jq '.closingIssuesReferences[] | "#\(.number)"'
-gh pr view <number> --json title,body --jq '.title + " " + .body' | grep -oE '(#[0-9]+|[A-Z]+-[0-9]+)' | sort -u
+gh pr view <number> --json closingIssuesReferences --jq '.closingIssuesReferences[] | "\(.repository.owner.login)/\(.repository.name)#\(.number)"'
+gh pr view <number> --json title,body --jq '.title + " " + .body' | grep -oE '(([[:alnum:]_.-]+/[[:alnum:]_.-]+)?#[0-9]+|[A-Z]+-[0-9]+)' | sort -u
 
 # Jira: same pattern match from title/body/branch
 ```

@@ -21,6 +21,15 @@ class TestPRFeedback(unittest.TestCase):
         self.h = PRFeedbackHandler("user/repo")
 
     @patch("subprocess.run")
+    def test_query_reads_root_and_latest_comment_not_a_capped_window(self, mock_run):
+        mock_run.return_value.stdout = json.dumps(THREADS)
+        self.h.fetch_unresolved_threads(123)
+        query = next(a for a in mock_run.call_args[0][0] if a.startswith("query="))
+        self.assertIn("comments(first: 1)", query)
+        self.assertIn("comments(last: 1)", query)
+        self.assertNotIn("first: 50", query)
+
+    @patch("subprocess.run")
     def test_fetch_unresolved_uses_graphql(self, mock_run):
         mock_run.return_value.stdout = json.dumps(THREADS)
         threads = self.h.fetch_unresolved_threads(123)

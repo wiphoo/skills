@@ -94,35 +94,32 @@ Works for any issue type — story, task, sub-task, bug, epic.
 
 #### Jira — transition status (story / task / sub-task / any)
 
-Fetch available transitions for the issue:
+Only when a status was requested (`TARGET_STATUS` non-empty) — a comment-only update must not call the transitions endpoint:
 
 ```bash
-TRANSITIONS=$(curl -s --fail-with-body "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
-  -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
-  -H "Accept: application/json")
-
-echo "$TRANSITIONS" | jq -r '.transitions[] | .name'
-```
-
-Apply transition by name or ID:
-
-```bash
-# Find transition ID by name
-TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r ".transitions[] | select(.name == \"$TARGET_STATUS\") | .id")
-
-if [[ -n "$TRANSITION_ID" ]]; then
-  # --fail-with-body makes curl exit non-zero on 4xx/5xx; only report success when it does not
-  if curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
+if [[ -n "$TARGET_STATUS" ]]; then
+  # Fetch available transitions for the issue
+  TRANSITIONS=$(curl -s --fail-with-body "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
     -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d "{\"transition\": {\"id\": \"$TRANSITION_ID\"}}"; then
-    echo "✅ $JIRA_ISSUE transitioned to $TARGET_STATUS"
+    -H "Accept: application/json")
+
+  # Find transition ID by name
+  TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r ".transitions[] | select(.name == \"$TARGET_STATUS\") | .id")
+
+  if [[ -n "$TRANSITION_ID" ]]; then
+    # --fail-with-body makes curl exit non-zero on 4xx/5xx; only report success when it does not
+    if curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
+      -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d "{\"transition\": {\"id\": \"$TRANSITION_ID\"}}"; then
+      echo "✅ $JIRA_ISSUE transitioned to $TARGET_STATUS"
+    else
+      echo "❌ Jira rejected the transition to $TARGET_STATUS"; exit 1
+    fi
   else
-    echo "❌ Jira rejected the transition to $TARGET_STATUS"; exit 1
+    echo "⚠️ Transition '$TARGET_STATUS' not found. Available:"
+    echo "$TRANSITIONS" | jq -r '.transitions[] | .name'
   fi
-else
-  echo "⚠️ Transition '$TARGET_STATUS' not found. Available:"
-  echo "$TRANSITIONS" | jq -r '.transitions[] | .name'
 fi
 ```
 

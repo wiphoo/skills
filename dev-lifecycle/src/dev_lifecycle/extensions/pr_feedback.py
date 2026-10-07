@@ -14,8 +14,11 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
         nodes {
           id
           isResolved
-          comments(first: 50) {
+          root: comments(first: 1) {
             nodes { databaseId body path line author { login } }
+          }
+          latest: comments(last: 1) {
+            nodes { databaseId createdAt body author { login } }
           }
         }
       }
@@ -38,7 +41,7 @@ class PRFeedbackHandler:
         self.repo = repo
 
     def fetch_unresolved_threads(self, pr_number: int) -> List[Dict[str, Any]]:
-        """Fetch unresolved review threads (GraphQL node id + first comment)."""
+        """Fetch unresolved review threads: node id, `root` (reply target) and `latest` comment."""
         owner, name = self.repo.split("/", 1)
         unresolved: List[Dict[str, Any]] = []
         cursor = None
