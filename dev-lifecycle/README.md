@@ -73,9 +73,9 @@ This umbrella skill provides three deterministic subcommands that guide a code c
 **Steps:**
 
 1. **Confirm Merge** — `gh pr view <number> --json mergedAt,mergeCommit,baseRefName`; continue only if `mergedAt` is non-null and `mergeCommit` present
-2. **Detect Issue** — prefer `gh pr view <number> --json closingIssuesReferences`; otherwise list every distinct match in title/body (`… | grep -oE '(#[0-9]+|[A-Z]+-[0-9]+)' | sort -u`) and stop unless exactly one remains
-3. **Update Comments** — GitHub: `gh issue comment <number> --body "PR merged: <url>\nMerge commit: <sha>\nBase branch: <branch>"`; Jira: post comment via REST
-4. **Transition Status** — GitHub: add label; Jira: list the issue's `/transitions`, match by name, and submit that transition ID (not a status ID)
+2. **Detect Issue** — prefer `gh pr view <number> --json closingIssuesReferences`; otherwise list every distinct match in title/body (`… | grep -oE '(([[:alnum:]_.-]+/[[:alnum:]_.-]+)?#[0-9]+|[A-Z]+-[0-9]+)' | sort -u`) and stop unless exactly one remains; keep the repository of an `owner/repo#N` reference as `ISSUE_REPO` (a bare `#N` belongs to the PR's repository)
+3. **Update Comments** — GitHub: `gh issue comment <number> --repo "$ISSUE_REPO" --body "PR merged: <url>\nMerge commit: <sha>\nBase branch: <branch>"`; Jira: post comment via REST
+4. **Transition Status** — GitHub: add label (`gh issue edit … --repo "$ISSUE_REPO"`); Jira: list the issue's `/transitions`, match by name, and submit that transition ID (not a status ID)
 5. **Sync Local Branch** — `git switch <base-branch>` then `git pull --ff-only`
 
 ---

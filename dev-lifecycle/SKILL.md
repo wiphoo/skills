@@ -166,13 +166,17 @@ Continue only if `mergedAt` is non-null and `mergeCommit` present. Use actual `b
 gh pr view <number> --json closingIssuesReferences --jq '.closingIssuesReferences[] | "\(.repository.owner.login)/\(.repository.name)#\(.number)"'
 gh pr view <number> --json title,body --jq '.title + " " + .body' | grep -oE '(([[:alnum:]_.-]+/[[:alnum:]_.-]+)?#[0-9]+|[A-Z]+-[0-9]+)' | sort -u
 
+# A reference like owner/repo#42 keeps its own repository; a bare #42 belongs to the PR's repository.
+# Use it on EVERY gh issue command in steps 3-4 (without --repo, gh targets the current checkout's repo)
+ISSUE_REPO="<owner/repo of the chosen reference, else the PR's owner/repo>"
+
 # Jira: same pattern match from title/body/branch
 ```
 
 #### Step 3: Update Comments
 ```bash
 # GitHub
-gh issue comment <issue-number> --body "PR merged: <url>\nMerge commit: <sha>\nBase branch: <branch>"
+gh issue comment <issue-number> --repo "$ISSUE_REPO" --body "PR merged: <url>\nMerge commit: <sha>\nBase branch: <branch>"
 
 # Jira
 jq -n --arg t "PR merged: <url> | Merge commit: <sha> | Base branch: <branch>" \
@@ -185,7 +189,7 @@ jq -n --arg t "PR merged: <url> | Merge commit: <sha> | Base branch: <branch>" \
 #### Step 4: Transition Status
 ```bash
 # GitHub (via label)
-gh issue edit <issue-number> --add-label "<target-status>"
+gh issue edit <issue-number> --repo "$ISSUE_REPO" --add-label "<target-status>"
 
 # Jira (via transition ID)
 # The transitions endpoint takes a transition ID (not a status ID): list the issue's transitions and match by name
