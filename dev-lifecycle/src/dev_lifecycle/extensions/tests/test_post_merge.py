@@ -86,6 +86,31 @@ class TestPostMerge(unittest.TestCase):
         self.assertEqual(self.h.detect_issue_github(456), ("owner/other-repo", 42))
 
     @patch("subprocess.run")
+    def test_detect_issue_github_fallback_parses_full_issue_url(self, mock_run):
+        mock_run.return_value.stdout = json.dumps({"closingIssuesReferences": [], "title": "t",
+            "body": "See https://github.com/acme/other/issues/42#issuecomment-1 for context"})
+        self.assertEqual(self.h.detect_issue_github(456), ("acme/other", 42))
+
+    @patch("subprocess.run")
+    def test_detect_issue_github_url_and_matching_qualified_ref_are_one_issue(self, mock_run):
+        mock_run.return_value.stdout = json.dumps({"closingIssuesReferences": [], "title": "acme/other#42",
+            "body": "https://github.com/acme/other/issues/42"})
+        self.assertEqual(self.h.detect_issue_github(456), ("acme/other", 42))
+
+    @patch("subprocess.run")
+    def test_detect_issue_github_url_and_different_ref_is_ambiguous(self, mock_run):
+        mock_run.return_value.stdout = json.dumps({"closingIssuesReferences": [], "title": "Related #7",
+            "body": "https://github.com/acme/other/issues/42"})
+        with self.assertRaises(ValueError):
+            self.h.detect_issue_github(456)
+
+    @patch("subprocess.run")
+    def test_detect_issue_github_pull_request_url_is_not_an_issue(self, mock_run):
+        mock_run.return_value.stdout = json.dumps({"closingIssuesReferences": [], "title": "t",
+            "body": "Follows https://github.com/acme/other/pull/9"})
+        self.assertIsNone(self.h.detect_issue_github(456))
+
+    @patch("subprocess.run")
     def test_update_github_issue_targets_given_repo(self, mock_run):
         mock_run.return_value.returncode = 0
         self.h.update_github_issue(42, "merged", repo="owner/other-repo")

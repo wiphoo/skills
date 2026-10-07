@@ -110,7 +110,8 @@ Transition status only if a target was supplied (`TARGET_STATUS` non-empty) — 
 if [[ -n "$TARGET_STATUS" ]]; then
   # The transitions endpoint takes a transition ID, not a status ID
   TRANSITIONS=$(curl -s --fail-with-body "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
-    -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" -H "Accept: application/json")
+    -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" -H "Accept: application/json") \
+    || { echo "❌ Could not list Jira transitions for $JIRA_ISSUE"; exit 1; }  # a failed lookup must not look like 'status not found'
   TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r ".transitions[] | select(.name == \"$TARGET_STATUS\") | .id")
   if [[ -n "$TRANSITION_ID" ]]; then
     # Bash does not stop on curl's error 22 (--fail-with-body); test its status before reporting success

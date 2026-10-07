@@ -101,7 +101,8 @@ if [[ -n "$TARGET_STATUS" ]]; then
   # Fetch available transitions for the issue
   TRANSITIONS=$(curl -s --fail-with-body "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
     -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
-    -H "Accept: application/json")
+    -H "Accept: application/json") \
+    || { echo "❌ Could not list Jira transitions for $JIRA_ISSUE"; exit 1; }  # a failed lookup must not look like 'status not found'
 
   # Find transition ID by name
   TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r ".transitions[] | select(.name == \"$TARGET_STATUS\") | .id")

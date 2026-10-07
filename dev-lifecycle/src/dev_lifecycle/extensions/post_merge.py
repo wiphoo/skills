@@ -30,6 +30,8 @@ class PostMergeHandler:
     
     # `owner/repo#N` or bare `#N` (the PR's own repository)
     _ISSUE_REF = re.compile(r"(?<![\w/#.-])((?:[\w.-]+/[\w.-]+)?)#(\d+)\b")
+    # https://github.com/owner/repo/issues/N (a non-closing link in the title/body)
+    _ISSUE_URL = re.compile(r"https://github\.com/([\w.-]+/[\w.-]+)/issues/(\d+)\b")
 
     def _closing_ref_repo(self, ref: dict) -> str:
         """Repository a closing reference belongs to (url first, then repository object)."""
@@ -54,11 +56,12 @@ class PostMergeHandler:
         ], capture_output=True, text=True, check=True)
 
         data = json.loads(result.stdout)
-        # Prefer GitHub's closing references; fall back to any [owner/repo]#N in the title/body
+        # Prefer GitHub's closing references; fall back to any [owner/repo]#N or issue URL in the title/body
         refs = {(self._closing_ref_repo(r), r["number"]) for r in data.get("closingIssuesReferences", [])}
         if not refs:
             text = f"{data.get('title') or ''} {data.get('body') or ''}"
             refs = {(repo or self.repo, int(n)) for repo, n in self._ISSUE_REF.findall(text)}
+            refs |= {(repo, int(n)) for repo, n in self._ISSUE_URL.findall(text)}
         if len(refs) > 1:
             found = sorted(f"{r}#{n}" for r, n in refs)
             raise ValueError(f"ambiguous: PR references multiple issues {found}; choose one explicitly")

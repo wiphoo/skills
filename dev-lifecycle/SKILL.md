@@ -193,14 +193,17 @@ gh issue edit <issue-number> --repo "$ISSUE_REPO" --add-label "<target-status>"
 
 # Jira (via transition ID)
 # The transitions endpoint takes a transition ID (not a status ID): list the issue's transitions and match by name
-TRANSITION_ID=$(curl -s --fail-with-body "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/transitions" \
-  -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" -H "Accept: application/json" \
-  | jq -r ".transitions[] | select(.name == \"<target-status>\") | .id")
+# Test the lookup's own status: `curl | jq` would report jq's (success) status and hide an HTTP error
+TRANSITIONS=$(curl -s --fail-with-body "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/transitions" \
+  -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" -H "Accept: application/json") \
+  || { echo "❌ Could not list Jira transitions for $ISSUE_KEY"; exit 1; }
+TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r ".transitions[] | select(.name == \"<target-status>\") | .id")
 if [ -n "$TRANSITION_ID" ]; then
   curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/transitions" \
     -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"transition\": {\"id\": \"$TRANSITION_ID\"}}"
+    -d "{\"transition\": {\"id\": \"$TRANSITION_ID\"}}" \
+    || { echo "❌ Jira rejected the transition"; exit 1; }
 fi
 ```
 
