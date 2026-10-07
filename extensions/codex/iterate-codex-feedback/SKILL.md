@@ -24,12 +24,21 @@ the checkout BEFORE replying to or resolving anything, or fixes can land on the 
 ```bash
 # Run from a clean checkout of the PR's repository
 git diff --quiet && git diff --cached --quiet || { echo "❌ Dirty worktree — stash or commit first"; exit 1; }
-PR_HEAD_SHA=$(gh pr view {number} --json headRefOid --jq .headRefOid)
-if [[ "$(git rev-parse HEAD)" != "$PR_HEAD_SHA" ]]; then
-  # `gh pr checkout` checks out the PR branch and sets its upstream, so a plain `git push` updates the PR
+read -r PR_HEAD_SHA PR_HEAD_REF < <(gh pr view {number} --json headRefOid,headRefName --jq '"\(.headRefOid) \(.headRefName)"')
+
+# A matching commit id is not enough: another branch can point at the same commit, or track a
+# different upstream. Require the PR's branch name as well, otherwise check the PR out.
+if [[ "$(git branch --show-current)" != "$PR_HEAD_REF" || "$(git rev-parse HEAD)" != "$PR_HEAD_SHA" ]]; then
+  # `gh pr checkout` checks out the PR branch and sets its upstream
   gh pr checkout {number} || { echo "❌ Cannot check out PR #{number}"; exit 1; }
-  [[ "$(git rev-parse HEAD)" == "$PR_HEAD_SHA" ]] || { echo "❌ Local branch is not at the PR head (pull first)"; exit 1; }
 fi
+[[ "$(git branch --show-current)" == "$PR_HEAD_REF" ]] || { echo "❌ Not on the PR branch $PR_HEAD_REF"; exit 1; }
+[[ "$(git rev-parse HEAD)" == "$PR_HEAD_SHA" ]] || { echo "❌ Local branch is not at the PR head (pull first)"; exit 1; }
+
+# The push target must be the PR branch too: derive remote and branch from the upstream and verify it
+UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null) || { echo "❌ $PR_HEAD_REF has no upstream"; exit 1; }
+[[ "${UPSTREAM#*/}" == "$PR_HEAD_REF" ]] || { echo "❌ Upstream $UPSTREAM is not the PR branch $PR_HEAD_REF"; exit 1; }
+PUSH_REMOTE="${UPSTREAM%%/*}"   # used by the explicit push in step 4
 ```
 
 ### 1. Initial setup and review acknowledgement
@@ -121,7 +130,7 @@ For each **valid** feedback:
 # Resolve thread when fully addressed
 
 # Push new commit
-# git push   (the checkout from step 0 tracks the PR branch; gh has no push subcommand)
+# git push "$PUSH_REMOTE" "HEAD:$PR_HEAD_REF"   (explicit target verified in step 0; gh has no push subcommand)
 
 # Ask for a review of the new head. Without automatic review-on-push nothing else triggers one,
 # and Condition B waits for a review of this exact commit. Capture REQUESTED_AT first (see step 1).
