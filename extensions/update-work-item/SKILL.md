@@ -45,7 +45,7 @@ If ambiguous, ask rather than guess.
 ```bash
 # Basic extraction from input
 ISSUE_REF="$1"
-if echo "$ISSUE_REF" | grep -qE '^[A-Z]+-[0-9]+$'; then
+if echo "$ISSUE_REF" | grep -qE '^[A-Z][A-Z0-9]+-[0-9]+$'; then
   TRACKER="jira"
   JIRA_ISSUE="$ISSUE_REF"
 elif echo "$ISSUE_REF" | grep -qE 'github\.com/[^/]+/[^/]+/issues/[0-9]+'; then

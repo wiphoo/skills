@@ -62,7 +62,7 @@ Determine the tracker and identifier in order:
 
 Detect source:
 
-- Jira: matches `[A-Z]+-[0-9]+`
+- Jira: matches `[A-Z][A-Z0-9]+-[0-9]+`
 - GitHub Issues: matches `#123` or issue URL
 
 If ambiguous, ask rather than guess. Prefer GitHub's closing references; otherwise collect every distinct match and stop unless exactly one remains (a PR saying `Related #10 … Fixes #20` must not silently pick `#10`):
@@ -70,7 +70,7 @@ If ambiguous, ask rather than guess. Prefer GitHub's closing references; otherwi
 ```bash
 CLOSING=$(gh pr view <number> --json closingIssuesReferences --jq '.closingIssuesReferences[] | "\(.repository.owner.login)/\(.repository.name)#\(.number)"')
 CANDIDATES=${CLOSING:-$(gh pr view <number> --json title,body --jq '.title + " " + .body' \
-  | grep -oE '([A-Z]+-[0-9]+|([[:alnum:]_.-]+/[[:alnum:]_.-]+)?#[0-9]+)' | sort -u)}
+  | grep -oE '([A-Z][A-Z0-9]+-[0-9]+|([[:alnum:]_.-]+/[[:alnum:]_.-]+)?#[0-9]+)' | sort -u)}
 if [[ $(echo "$CANDIDATES" | grep -c .) -ne 1 ]]; then
   echo "❌ Ambiguous or missing work item (candidates: ${CANDIDATES:-none}). Ask the user."; exit 1
 fi
