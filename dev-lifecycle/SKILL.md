@@ -164,7 +164,9 @@ Continue only if `mergedAt` is non-null and `mergeCommit` present. Use actual `b
 ```bash
 # GitHub: prefer closing references, else every distinct match in title/body; stop unless exactly one
 gh pr view <number> --json closingIssuesReferences --jq '.closingIssuesReferences[] | "\(.repository.owner.login)/\(.repository.name)#\(.number)"'
-gh pr view <number> --json title,body --jq '.title + " " + .body' | grep -oE '(([[:alnum:]_.-]+/[[:alnum:]_.-]+)?#[0-9]+|[A-Z][A-Z0-9]+-[0-9]+)' | sort -u
+gh pr view <number> --json headRefName,title,body --jq '[.headRefName, .title, .body] | map(. // "") | join(" ")' \
+  | grep -oE '(([[:alnum:]_.-]+/[[:alnum:]_.-]+)?#[0-9]+|[A-Z][A-Z0-9]+-[0-9]+|https://github\.com/[^/ ]+/[^/ ]+/issues/[0-9]+)' | sort -u
+# (a full issue URL is the same issue as owner/repo#N: normalise it before comparing candidates)
 
 # A reference like owner/repo#42 keeps its own repository; a bare #42 belongs to the PR's repository.
 # Use it on EVERY gh issue command in steps 3-4 (without --repo, gh targets the current checkout's repo)

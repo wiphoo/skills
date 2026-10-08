@@ -24,21 +24,31 @@ the checkout BEFORE replying to or resolving anything, or fixes can land on the 
 ```bash
 # Run from a clean checkout of the PR's repository
 git diff --quiet && git diff --cached --quiet || { echo "❌ Dirty worktree — stash or commit first"; exit 1; }
-read -r PR_HEAD_SHA PR_HEAD_REF < <(gh pr view {number} --json headRefOid,headRefName --jq '"\(.headRefOid) \(.headRefName)"')
+read -r PR_HEAD_SHA PR_HEAD_REF PR_HEAD_REPO < <(gh pr view {number} \
+  --json headRefOid,headRefName,headRepositoryOwner,headRepository \
+  --jq '"\(.headRefOid) \(.headRefName) \(.headRepositoryOwner.login)/\(.headRepository.name)"')
 
 # A matching commit id is not enough: another branch can point at the same commit, or track a
 # different upstream. Require the PR's branch name as well, otherwise check the PR out.
 if [[ "$(git branch --show-current)" != "$PR_HEAD_REF" || "$(git rev-parse HEAD)" != "$PR_HEAD_SHA" ]]; then
-  # `gh pr checkout` checks out the PR branch and sets its upstream
+  # `gh pr checkout` checks out the PR branch and sets its upstream (a fork PR tracks the fork)
   gh pr checkout {number} || { echo "❌ Cannot check out PR #{number}"; exit 1; }
 fi
 [[ "$(git branch --show-current)" == "$PR_HEAD_REF" ]] || { echo "❌ Not on the PR branch $PR_HEAD_REF"; exit 1; }
 [[ "$(git rev-parse HEAD)" == "$PR_HEAD_SHA" ]] || { echo "❌ Local branch is not at the PR head (pull first)"; exit 1; }
 
-# The push target must be the PR branch too: derive remote and branch from the upstream and verify it
-UPSTREAM=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null) || { echo "❌ $PR_HEAD_REF has no upstream"; exit 1; }
-[[ "${UPSTREAM#*/}" == "$PR_HEAD_REF" ]] || { echo "❌ Upstream $UPSTREAM is not the PR branch $PR_HEAD_REF"; exit 1; }
-PUSH_REMOTE="${UPSTREAM%%/*}"   # used by the explicit push in step 4
+# The push target must be the PR branch IN THE PR'S HEAD REPOSITORY. For a fork PR (alice/repo:feature)
+# a local `feature` tracking origin/feature (the base repo) passes a name-only check but would push to
+# the wrong repository. Read the branch's configured remote (a remote name, or a URL when gh checked out
+# a fork), resolve it to owner/repo and compare with the PR's head repository.
+PUSH_REMOTE=$(git config "branch.$PR_HEAD_REF.pushRemote" || git config "branch.$PR_HEAD_REF.remote") \
+  || { echo "❌ $PR_HEAD_REF has no upstream remote"; exit 1; }
+UPSTREAM_BRANCH=$(git config "branch.$PR_HEAD_REF.merge" || true)
+[[ "${UPSTREAM_BRANCH#refs/heads/}" == "$PR_HEAD_REF" ]] || { echo "❌ Upstream branch ${UPSTREAM_BRANCH:-none} is not the PR branch $PR_HEAD_REF"; exit 1; }
+REMOTE_URL=$(git remote get-url "$PUSH_REMOTE" 2>/dev/null || echo "$PUSH_REMOTE")
+REMOTE_REPO=$(echo "$REMOTE_URL" | sed -E 's#(\.git)?/?$##; s#^.*[:/]([^/:]+/[^/]+)$#\1#')
+[[ "${REMOTE_REPO,,}" == "${PR_HEAD_REPO,,}" ]] \
+  || { echo "❌ $PUSH_REMOTE points to $REMOTE_REPO, not the PR head repository $PR_HEAD_REPO"; exit 1; }
 ```
 
 ### 1. Initial setup and review acknowledgement

@@ -79,8 +79,14 @@ if [[ -n "${WORK_ITEM:-}" ]]; then
 else
   # 2. Otherwise infer it from the PR: closing references first, then every distinct match
   CLOSING=$(gh pr view <number> --json closingIssuesReferences --jq '.closingIssuesReferences[] | "\(.repository.owner.login)/\(.repository.name)#\(.number)"')
-  CANDIDATES=${CLOSING:-$(gh pr view <number> --json title,body --jq '.title + " " + .body' \
-    | grep -oE '([A-Z][A-Z0-9]+-[0-9]+|([[:alnum:]_.-]+/[[:alnum:]_.-]+)?#[0-9]+)' | sort -u)}
+  # Branch name, title and body are all searched (a Jira key may appear only in the branch), and full
+  # issue URLs are normalised to owner/repo#N so the referenced repository is kept
+  TEXT=$(gh pr view <number> --json headRefName,title,body --jq '[.headRefName, .title, .body] | map(. // "") | join(" ")')
+  CANDIDATES=${CLOSING:-$( {
+      echo "$TEXT" | grep -oE 'https://github\.com/[^/ ]+/[^/ ]+/issues/[0-9]+' \
+        | sed -E 's|https://github\.com/([^/]+/[^/]+)/issues/([0-9]+)|\1#\2|'
+      echo "$TEXT" | grep -oE '([A-Z][A-Z0-9]+-[0-9]+|([[:alnum:]_.-]+/[[:alnum:]_.-]+)?#[0-9]+)'
+    } | sort -u)}
   if [[ $(echo "$CANDIDATES" | grep -c .) -ne 1 ]]; then
     echo "❌ Ambiguous or missing work item (candidates: ${CANDIDATES:-none}). Ask the user."; exit 1
   fi
