@@ -45,10 +45,14 @@ PUSH_REMOTE=$(git config "branch.$PR_HEAD_REF.pushRemote" || git config "branch.
   || { echo "❌ $PR_HEAD_REF has no upstream remote"; exit 1; }
 UPSTREAM_BRANCH=$(git config "branch.$PR_HEAD_REF.merge" || true)
 [[ "${UPSTREAM_BRANCH#refs/heads/}" == "$PR_HEAD_REF" ]] || { echo "❌ Upstream branch ${UPSTREAM_BRANCH:-none} is not the PR branch $PR_HEAD_REF"; exit 1; }
-REMOTE_URL=$(git remote get-url "$PUSH_REMOTE" 2>/dev/null || echo "$PUSH_REMOTE")
-REMOTE_REPO=$(echo "$REMOTE_URL" | sed -E 's#(\.git)?/?$##; s#^.*[:/]([^/:]+/[^/]+)$#\1#')
-[[ "${REMOTE_REPO,,}" == "${PR_HEAD_REPO,,}" ]] \
-  || { echo "❌ $PUSH_REMOTE points to $REMOTE_REPO, not the PR head repository $PR_HEAD_REPO"; exit 1; }
+# A remote may have multiple pushurl entries; every destination must be the PR head repository.
+mapfile -t PUSH_URLS < <(git remote get-url --push --all "$PUSH_REMOTE" 2>/dev/null)
+if [[ ${#PUSH_URLS[@]} -eq 0 ]]; then PUSH_URLS=("$PUSH_REMOTE"); fi
+for PUSH_URL in "${PUSH_URLS[@]}"; do
+  PUSH_REPO=$(echo "$PUSH_URL" | sed -E 's#(\.git)?/?$##; s#^.*[:/]([^/:]+/[^/]+)$#\1#')
+  [[ "${PUSH_REPO,,}" == "${PR_HEAD_REPO,,}" ]] \
+    || { echo "❌ $PUSH_REMOTE push URL points to $PUSH_REPO, not the PR head repository $PR_HEAD_REPO"; exit 1; }
+done
 ```
 
 ### 1. Initial setup and review acknowledgement

@@ -103,11 +103,12 @@ if [[ "$ISSUE_REF" == */*#* ]]; then ISSUE_REPO="${ISSUE_REF%%#*}"; else ISSUE_R
 Add comment (Jira v3 requires an ADF body and the singular `/comment` resource):
 
 ```bash
-jq -n --arg t "PR merged: <URL> | Merge commit: <COMMIT> | Base branch: <BASE_BRANCH>" \
-  '{body:{type:"doc",version:1,content:[{type:"paragraph",content:[{type:"text",text:$t}]}]}}' \
-| curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/comment" \
+COMMENT_JSON=$(jq -n --arg t "PR merged: <URL> | Merge commit: <COMMIT> | Base branch: <BASE_BRANCH>" \
+  '{body:{type:"doc",version:1,content:[{type:"paragraph",content:[{type:"text",text:$t}]}]}}')
+curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/comment" \
   -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
-  -H "Content-Type: application/json" -d @-
+  -H "Content-Type: application/json" -d "$COMMENT_JSON" \
+  || { echo "❌ Could not add Jira comment to $JIRA_ISSUE"; exit 1; }
 ```
 
 Transition status only if a target was supplied (`TARGET_STATUS` non-empty) — a comment-only update must not call the transitions endpoint:
