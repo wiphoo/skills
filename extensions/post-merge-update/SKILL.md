@@ -177,7 +177,15 @@ LOCAL_REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner) \
   || { echo "❌ Could not resolve the current checkout's repository"; exit 1; }
 if [[ "${PR_REPO,,}" == "${LOCAL_REPO,,}" ]]; then
   [[ -z "$(git status --porcelain)" ]] || { echo "❌ Dirty worktree (incl. untracked files) — not switching branches"; exit 1; }  # git switch would carry local edits onto the base branch
-  git switch <base-branch> && git pull --ff-only
+  # A bare `git pull` follows the branch's configured upstream, which may be a mirror or fork. Pull from a
+  # remote whose URL is verified to be the PR repository instead.
+  SYNC_REMOTE=""
+  for R in $(git remote); do
+    S=$(git remote get-url "$R" | sed -E 's#(\.git)?/?$##; s#^.*[:/]([^/:]+/[^/]+)$#\1#')
+    [[ "${S,,}" == "${PR_REPO,,}" ]] && { SYNC_REMOTE="$R"; break; }
+  done
+  [[ -n "$SYNC_REMOTE" ]] || { echo "❌ No remote points to $PR_REPO — not syncing"; exit 1; }
+  git switch <base-branch> && git pull --ff-only "$SYNC_REMOTE" <base-branch>
 else
   echo "⚠️ Checkout is $LOCAL_REPO, not $PR_REPO — skipping local sync; run it from a $PR_REPO checkout."
 fi

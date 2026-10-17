@@ -46,16 +46,18 @@ PUSH_REMOTE=$(git config "branch.$PR_HEAD_REF.pushRemote" || git config "branch.
   || { echo "❌ $PR_HEAD_REF has no upstream remote"; exit 1; }
 UPSTREAM_BRANCH=$(git config "branch.$PR_HEAD_REF.merge" || true)
 [[ "${UPSTREAM_BRANCH#refs/heads/}" == "$PR_HEAD_REF" ]] || { echo "❌ Upstream branch ${UPSTREAM_BRANCH:-none} is not the PR branch $PR_HEAD_REF"; exit 1; }
+# The PR's host comes from the PR itself, so GitHub Enterprise works without GH_HOST being set.
+PR_HOST=$(gh pr view {number} --json url --jq '.url | capture("^https://(?<h>[^/]+)/").h') \
+  || { echo "❌ Could not resolve the PR host"; exit 1; }
 # A remote may have multiple pushurl entries; every destination must be the PR head repository.
 mapfile -t PUSH_URLS < <(git remote get-url --push --all "$PUSH_REMOTE" 2>/dev/null)
 if [[ ${#PUSH_URLS[@]} -eq 0 ]]; then PUSH_URLS=("$PUSH_REMOTE"); fi
 for PUSH_URL in "${PUSH_URLS[@]}"; do
   # The owner/repo suffix alone is not enough: git@gitlab.example:alice/repo.git or a local path ending in
-  # alice/repo would pass. Require the GitHub host too (GH_HOST for GitHub Enterprise, else github.com).
-  GH_PUSH_HOST="${GH_HOST:-github.com}"
+  # alice/repo would pass. Require the PR's own host (github.com or a GitHub Enterprise host) too.
   case "$PUSH_URL" in
-    "https://$GH_PUSH_HOST/"*|"https://"*"@$GH_PUSH_HOST/"*|"ssh://git@$GH_PUSH_HOST/"*|"git@$GH_PUSH_HOST:"*) ;;
-    *) echo "❌ $PUSH_REMOTE push URL $PUSH_URL is not on $GH_PUSH_HOST"; exit 1 ;;
+    "https://$PR_HOST/"*|"https://"*"@$PR_HOST/"*|"ssh://git@$PR_HOST/"*|"git@$PR_HOST:"*) ;;
+    *) echo "❌ $PUSH_REMOTE push URL $PUSH_URL is not on $PR_HOST"; exit 1 ;;
   esac
   PUSH_REPO=$(echo "$PUSH_URL" | sed -E 's#(\.git)?/?$##; s#^.*[:/]([^/:]+/[^/]+)$#\1#')
   [[ "${PUSH_REPO,,}" == "${PR_HEAD_REPO,,}" ]] \
@@ -89,13 +91,17 @@ gh api -X POST /repos/{owner}/{repo}/issues/{number}/comments \
 # --paginate (default page is 30); only count a 👍 created at/after the current review request
 # (>= REQUESTED_AT), so a 👍 left from an earlier head does not end the loop before the new head is
 # reviewed. The stale test below is the exact complement (< REQUESTED_AT), so every +1 is one or the other.
-THUMBS_UP=$(gh api --paginate /repos/{owner}/{repo}/issues/{number}/reactions 2>/dev/null \
-  --jq ".[] | select(.content == \"+1\" and (.user.login | startswith(\"chatgpt-codex-connector\")) and .created_at >= \"$REQUESTED_AT\") | .id" | wc -l)
+# Capture the API response first and test its status: piping straight into `wc -l` would turn an
+# expired login or a transient API error into a count of 0 and the loop would poll forever.
+REACTIONS=$(gh api --paginate /repos/{owner}/{repo}/issues/{number}/reactions --jq '.[]') \
+  || { echo "❌ Could not read PR reactions; cannot determine approval status"; exit 1; }
+THUMBS_UP=$(echo "$REACTIONS" | jq -s --arg t "$REQUESTED_AT" \
+  '[.[] | select(.content == "+1" and (.user.login | startswith("chatgpt-codex-connector")) and .created_at >= $t)] | length')
 # GitHub returns the EXISTING reaction (old created_at) instead of creating a second +1 from the same
 # user, so once a +1 exists it can never signal a later approval. If one predates this request, ignore
 # reactions entirely and rely on Condition B (Codex review of the current head + no unresolved threads).
-STALE_THUMBS_UP=$(gh api --paginate /repos/{owner}/{repo}/issues/{number}/reactions 2>/dev/null \
-  --jq ".[] | select(.content == \"+1\" and (.user.login | startswith(\"chatgpt-codex-connector\")) and .created_at < \"$REQUESTED_AT\") | .id" | wc -l)
+STALE_THUMBS_UP=$(echo "$REACTIONS" | jq -s --arg t "$REQUESTED_AT" \
+  '[.[] | select(.content == "+1" and (.user.login | startswith("chatgpt-codex-connector")) and .created_at < $t)] | length')
 
 # Check for any ❤️ eyes or review response reactions
 REVIEW_RESPONSE=$(gh api /repos/{owner}/{repo}/pulls/{number}/comments 2>/dev/null | jq -r '.[] | select(.body | contains("👀")) | .user.login + " acknowledged"')
