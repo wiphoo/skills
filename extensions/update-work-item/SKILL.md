@@ -110,7 +110,9 @@ if [[ -n "$TARGET_STATUS" ]]; then
     || { echo "❌ Could not list Jira transitions for $JIRA_ISSUE"; exit 1; }  # a failed lookup must not look like 'status not found'
 
   # Find transition ID by name
-  TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r ".transitions[] | select(.name == \"$TARGET_STATUS\") | .id")
+  # --arg passes the name as data, so quotes or backslashes in it cannot break the jq program; a jq failure stops the run
+  TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r --arg s "$TARGET_STATUS" '.transitions[] | select(.name == $s) | .id') \
+    || { echo "❌ Could not parse Jira transitions for $JIRA_ISSUE"; exit 1; }
 
   if [[ -n "$TRANSITION_ID" ]]; then
     # --fail-with-body makes curl exit non-zero on 4xx/5xx; only report success when it does not

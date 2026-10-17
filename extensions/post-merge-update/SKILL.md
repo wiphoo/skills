@@ -121,7 +121,9 @@ if [[ -n "$TARGET_STATUS" ]]; then
   TRANSITIONS=$(curl -s --fail-with-body "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \
     -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" -H "Accept: application/json") \
     || { echo "❌ Could not list Jira transitions for $JIRA_ISSUE"; exit 1; }  # a failed lookup must not look like 'status not found'
-  TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r ".transitions[] | select(.name == \"$TARGET_STATUS\") | .id")
+  # --arg passes the name as data, so quotes or backslashes in it cannot break the jq program; a jq failure stops the run
+  TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r --arg s "$TARGET_STATUS" '.transitions[] | select(.name == $s) | .id') \
+    || { echo "❌ Could not parse Jira transitions for $JIRA_ISSUE"; exit 1; }
   if [[ -n "$TRANSITION_ID" ]]; then
     # Bash does not stop on curl's error 22 (--fail-with-body); test its status before reporting success
     if curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$JIRA_ISSUE/transitions" \

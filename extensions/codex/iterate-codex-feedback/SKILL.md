@@ -23,7 +23,8 @@ the checkout BEFORE replying to or resolving anything, or fixes can land on the 
 
 ```bash
 # Run from a clean checkout of the PR's repository
-git diff --quiet && git diff --cached --quiet || { echo "❌ Dirty worktree — stash or commit first"; exit 1; }
+# --porcelain also lists untracked files, which git diff ignores and a later `git add` could sweep into a fix commit
+[[ -z "$(git status --porcelain)" ]] || { echo "❌ Dirty worktree (including untracked files) — stash or commit first"; exit 1; }
 read -r PR_HEAD_SHA PR_HEAD_REF PR_HEAD_REPO < <(gh pr view {number} \
   --json headRefOid,headRefName,headRepositoryOwner,headRepository \
   --jq '"\(.headRefOid) \(.headRefName) \(.headRepositoryOwner.login)/\(.headRepository.name)"')
@@ -67,7 +68,8 @@ REQUESTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # Comment to trigger review (top-level PR comments use the issues endpoint)
 # Replace {owner} {repo} {number} as needed
 gh api -X POST /repos/{owner}/{repo}/issues/{number}/comments \
-  -f body='@codex review'
+  -f body='@codex review' \
+  || { echo "❌ Could not post the review request; not starting the loop"; exit 1; }
 
 # Look for acknowledgement response (eyes emoji 👀) in the latest comment
 # This indicates the reviewer is aware and will provide feedback
@@ -152,7 +154,8 @@ For each **valid** feedback:
 # Ask for a review of the new head. Without automatic review-on-push nothing else triggers one,
 # and Condition B waits for a review of this exact commit. Capture REQUESTED_AT first (see step 1).
 # REQUESTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-# gh api -X POST /repos/{owner}/{repo}/issues/{number}/comments -f body='@codex review'
+# gh api -X POST /repos/{owner}/{repo}/issues/{number}/comments -f body='@codex review' \
+#   || { echo "❌ Could not post the review request"; exit 1; }
 ```
 
 ### 5. Push-back handling (Human-in-the-loop)
