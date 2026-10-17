@@ -199,7 +199,9 @@ gh issue edit <issue-number> --repo "$ISSUE_REPO" --add-label "<target-status>"
 TRANSITIONS=$(curl -s --fail-with-body "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/transitions" \
   -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" -H "Accept: application/json") \
   || { echo "❌ Could not list Jira transitions for $ISSUE_KEY"; exit 1; }
-TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r ".transitions[] | select(.name == \"<target-status>\") | .id")
+# --arg passes the name as data (quotes/backslashes cannot break the jq program); a jq failure must stop the run
+TRANSITION_ID=$(echo "$TRANSITIONS" | jq -r --arg s "<target-status>" '.transitions[] | select(.name == $s) | .id') \
+  || { echo "❌ Could not parse Jira transitions for $ISSUE_KEY"; exit 1; }
 if [ -n "$TRANSITION_ID" ]; then
   curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/$ISSUE_KEY/transitions" \
     -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
@@ -211,6 +213,7 @@ fi
 
 #### Step 5: Sync Local Branch
 ```bash
+[[ -z "$(git status --porcelain)" ]] || { echo "❌ Dirty worktree (incl. untracked files) — not switching branches"; exit 1; }  # git switch would carry local edits onto the base branch
 git switch <base-branch>
 git pull --ff-only
 ```

@@ -176,6 +176,7 @@ PR_REPO=$(gh pr view <number> "${PR_REPO_ARGS[@]}" --json url --jq '.url | captu
 LOCAL_REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner) \
   || { echo "❌ Could not resolve the current checkout's repository"; exit 1; }
 if [[ "${PR_REPO,,}" == "${LOCAL_REPO,,}" ]]; then
+  [[ -z "$(git status --porcelain)" ]] || { echo "❌ Dirty worktree (incl. untracked files) — not switching branches"; exit 1; }  # git switch would carry local edits onto the base branch
   git switch <base-branch> && git pull --ff-only
 else
   echo "⚠️ Checkout is $LOCAL_REPO, not $PR_REPO — skipping local sync; run it from a $PR_REPO checkout."
