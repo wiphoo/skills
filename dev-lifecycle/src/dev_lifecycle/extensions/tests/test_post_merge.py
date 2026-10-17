@@ -50,6 +50,13 @@ class TestPostMerge(unittest.TestCase):
         self.assertEqual(self.h.detect_issue_github(456), ("user/repo", 42))
 
     @patch("subprocess.run")
+    def test_detect_issue_github_searches_source_branch(self, mock_run):
+        mock_run.return_value.stdout = json.dumps(
+            {"closingIssuesReferences": [], "headRefName": "fix/#42-widget", "title": "Add thing", "body": ""})
+        self.assertEqual(self.h.detect_issue_github(456), ("user/repo", 42))
+        self.assertIn("headRefName", " ".join(mock_run.call_args[0][0]))
+
+    @patch("subprocess.run")
     def test_detect_issue_github_fallback_rejects_multiple_and_none(self, mock_run):
         mock_run.return_value.stdout = json.dumps(
             {"closingIssuesReferences": [], "title": "Related #10", "body": "Fixes #20"})

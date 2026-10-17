@@ -168,9 +168,18 @@ If the source supports comments but not status transitions, add the comment and 
 
 ### 5. Synchronize the local repository
 
+Only synchronize when the current checkout IS the PR's repository. With a PR from another repository (`PR_REPO_ARGS`), `git switch`/`git pull` would touch an unrelated repository's same-named branch:
+
 ```bash
-git switch <base-branch>
-git pull --ff-only
+PR_REPO=$(gh pr view <number> "${PR_REPO_ARGS[@]}" --json url --jq '.url | capture("github.com/(?<r>[^/]+/[^/]+)/pull").r') \
+  || { echo "❌ Could not resolve the PR repository"; exit 1; }
+LOCAL_REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner) \
+  || { echo "❌ Could not resolve the current checkout's repository"; exit 1; }
+if [[ "${PR_REPO,,}" == "${LOCAL_REPO,,}" ]]; then
+  git switch <base-branch> && git pull --ff-only
+else
+  echo "⚠️ Checkout is $LOCAL_REPO, not $PR_REPO — skipping local sync; run it from a $PR_REPO checkout."
+fi
 ```
 
 If the worktree is dirty, the branch is unavailable, or the pull cannot fast-forward, stop and report the condition without resetting or overwriting local work.

@@ -29,7 +29,7 @@ class PostMergeHandler:
         return merged
     
     # `owner/repo#N` or bare `#N` (the PR's own repository)
-    _ISSUE_REF = re.compile(r"(?<![\w/#.-])((?:[\w.-]+/[\w.-]+)?)#(\d+)\b")
+    _ISSUE_REF = re.compile(r"(?<![\w#.-])((?:[\w.-]+/[\w.-]+)?)#(\d+)\b")
     # https://github.com/owner/repo/issues/N (a non-closing link in the title/body)
     _ISSUE_URL = re.compile(r"https://github\.com/([\w.-]+/[\w.-]+)/issues/(\d+)\b")
 
@@ -52,14 +52,15 @@ class PostMergeHandler:
         result = subprocess.run([
             "gh", "pr", "view", str(pr_number),
             "--repo", self.repo,
-            "--json", "closingIssuesReferences,title,body"
+            "--json", "closingIssuesReferences,headRefName,title,body"
         ], capture_output=True, text=True, check=True)
 
         data = json.loads(result.stdout)
         # Prefer GitHub's closing references; fall back to any [owner/repo]#N or issue URL in the title/body
         refs = {(self._closing_ref_repo(r), r["number"]) for r in data.get("closingIssuesReferences", [])}
         if not refs:
-            text = f"{data.get('title') or ''} {data.get('body') or ''}"
+            # the source branch is searched too (e.g. `fix/#42-widget`), like the Jira detector
+            text = " ".join(data.get(k) or "" for k in ("headRefName", "title", "body"))
             refs = {(repo or self.repo, int(n)) for repo, n in self._ISSUE_REF.findall(text)}
             refs |= {(repo, int(n)) for repo, n in self._ISSUE_URL.findall(text)}
         if len(refs) > 1:
