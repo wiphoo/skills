@@ -106,6 +106,8 @@ fi
 ```bash
 # 1. Fetch ALL unresolved threads (review threads are GraphQL-only; record each thread id, path, line, body, author)
 # --paginate follows pageInfo/endCursor so no unresolved thread past the first 100 is missed
+# pipefail: a failed gh request must not be turned into an empty array by the trailing jq -s
+set -o pipefail
 UNRESOLVED=$(gh api graphql --paginate -f query='
 query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){
   reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
@@ -113,7 +115,8 @@ query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:
       root:comments(first:1){nodes{databaseId body path line author{login}}}
       latest:comments(last:1){nodes{databaseId createdAt body author{login}}}}}}}}' \
   -f o={owner} -f r={repo} -F n={number} \
-  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)' | jq -s '.')
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not)' | jq -s '.') \
+  || { echo "❌ Could not fetch review threads; not treating this as clean"; exit 1; }
 # .root.nodes[0].databaseId is the id to reply to; .latest.nodes[0] is the newest comment however long
 # the thread is (a last:1 window, so no 50-comment cap) — read it so a human/reviewer answer to an
 # earlier pushback is not reprocessed as stale feedback. If latest == root, nobody has replied yet.

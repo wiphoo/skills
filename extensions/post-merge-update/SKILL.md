@@ -152,7 +152,8 @@ Update status via label or field (if using GitHub Projects):
 
 ```bash
 if [[ -n "$TARGET_STATUS" ]]; then
-  gh issue edit <issue_number> --repo "$ISSUE_REPO" --add-label "$TARGET_STATUS"
+  gh issue edit <issue_number> --repo "$ISSUE_REPO" --add-label "$TARGET_STATUS" \
+    || { echo "❌ Could not apply status $TARGET_STATUS to $ISSUE_REPO#<issue_number>"; exit 1; }
 fi
 ```
 

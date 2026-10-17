@@ -143,7 +143,8 @@ case "$TARGET_STATUS" in
   done|closed)    gh issue close  "$GITHUB_ISSUE" "${GH_REPO[@]}" ;;
   reopen)         gh issue reopen "$GITHUB_ISSUE" "${GH_REPO[@]}" ;;
   *)              gh issue edit   "$GITHUB_ISSUE" "${GH_REPO[@]}" --add-label "$TARGET_STATUS" ;;
-esac
+esac \
+  || { echo "❌ Could not apply status \"$TARGET_STATUS\" to $GITHUB_ISSUE"; exit 1; }
 ```
 
 If the project uses GitHub Project fields (status field), you may need to update via `gh api` instead of label change.
