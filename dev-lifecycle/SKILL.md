@@ -79,15 +79,18 @@ gh pr create --title "<title>" --body "<body>" --base <base-branch>
 #### Step 7: Link to Tracker
 ```bash
 # GitHub
-gh issue comment <issue-number> --body "PR opened: <pr-url>"   # no precreated label needed
+gh issue comment <issue-number> --body "PR opened: <pr-url>" \
+  || { echo "❌ Could not comment on the issue"; exit 1; }   # no precreated label needed
 
 # Jira
 # Jira v3 comment bodies must be Atlassian Document Format (ADF)
+set -o pipefail   # a jq failure or an HTTP error from curl must fail the whole pipeline
 jq -n --arg t "PR opened: <pr-url>" \
   '{body:{type:"doc",version:1,content:[{type:"paragraph",content:[{type:"text",text:$t}]}]}}' \
 | curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/<issue-key>/comment" \
   -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
-  -H "Content-Type: application/json" -d @-
+  -H "Content-Type: application/json" -d @- \
+  || { echo "❌ Could not add the Jira comment"; exit 1; }
 ```
 
 #### Step 8: Cleanup
@@ -178,20 +181,24 @@ ISSUE_REPO="<owner/repo of the chosen reference, else the PR's owner/repo>"
 #### Step 3: Update Comments
 ```bash
 # GitHub
-gh issue comment <issue-number> --repo "$ISSUE_REPO" --body "PR merged: <url>\nMerge commit: <sha>\nBase branch: <branch>"
+gh issue comment <issue-number> --repo "$ISSUE_REPO" --body "PR merged: <url>\nMerge commit: <sha>\nBase branch: <branch>" \
+  || { echo "❌ Could not comment on the issue; not transitioning or syncing"; exit 1; }
 
 # Jira
+set -o pipefail   # a jq failure or an HTTP error from curl must fail the whole pipeline
 jq -n --arg t "PR merged: <url> | Merge commit: <sha> | Base branch: <branch>" \
   '{body:{type:"doc",version:1,content:[{type:"paragraph",content:[{type:"text",text:$t}]}]}}' \
 | curl -s --fail-with-body -X POST "$JIRA_BASE_URL/rest/api/3/issue/<issue-key>/comment" \
   -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
-  -H "Content-Type: application/json" -d @-
+  -H "Content-Type: application/json" -d @- \
+  || { echo "❌ Could not add the Jira comment; not transitioning or syncing"; exit 1; }
 ```
 
 #### Step 4: Transition Status
 ```bash
 # GitHub (via label)
-gh issue edit <issue-number> --repo "$ISSUE_REPO" --add-label "<target-status>"
+gh issue edit <issue-number> --repo "$ISSUE_REPO" --add-label "<target-status>" \
+  || { echo "❌ Could not apply the status label"; exit 1; }
 
 # Jira (via transition ID)
 # The transitions endpoint takes a transition ID (not a status ID): list the issue's transitions and match by name
