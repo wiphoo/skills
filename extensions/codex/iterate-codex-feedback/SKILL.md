@@ -50,6 +50,13 @@ UPSTREAM_BRANCH=$(git config "branch.$PR_HEAD_REF.merge" || true)
 mapfile -t PUSH_URLS < <(git remote get-url --push --all "$PUSH_REMOTE" 2>/dev/null)
 if [[ ${#PUSH_URLS[@]} -eq 0 ]]; then PUSH_URLS=("$PUSH_REMOTE"); fi
 for PUSH_URL in "${PUSH_URLS[@]}"; do
+  # The owner/repo suffix alone is not enough: git@gitlab.example:alice/repo.git or a local path ending in
+  # alice/repo would pass. Require the GitHub host too (GH_HOST for GitHub Enterprise, else github.com).
+  GH_PUSH_HOST="${GH_HOST:-github.com}"
+  case "$PUSH_URL" in
+    "https://$GH_PUSH_HOST/"*|"https://"*"@$GH_PUSH_HOST/"*|"ssh://git@$GH_PUSH_HOST/"*|"git@$GH_PUSH_HOST:"*) ;;
+    *) echo "❌ $PUSH_REMOTE push URL $PUSH_URL is not on $GH_PUSH_HOST"; exit 1 ;;
+  esac
   PUSH_REPO=$(echo "$PUSH_URL" | sed -E 's#(\.git)?/?$##; s#^.*[:/]([^/:]+/[^/]+)$#\1#')
   [[ "${PUSH_REPO,,}" == "${PR_HEAD_REPO,,}" ]] \
     || { echo "❌ $PUSH_REMOTE push URL points to $PUSH_REPO, not the PR head repository $PR_HEAD_REPO"; exit 1; }

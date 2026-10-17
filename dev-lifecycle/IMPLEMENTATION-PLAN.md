@@ -1,3 +1,7 @@
+---
+name: dev-lifecycle-implementation-plan
+description: Implementation plan for the dev-lifecycle umbrella skill.
+---
 # Implementation Plan: Dev Lifecycle Umbrella Skill
 
 ## Overview

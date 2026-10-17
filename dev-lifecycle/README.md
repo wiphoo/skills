@@ -1,3 +1,7 @@
+---
+name: dev-lifecycle-readme
+description: Overview of the dev-lifecycle umbrella skill: task, pr-feedback and post-merge subcommands.
+---
 # Dev Lifecycle — Umbrella Skill
 
 **Dev Lifecycle** orchestrates the full development lifecycle across three domains:

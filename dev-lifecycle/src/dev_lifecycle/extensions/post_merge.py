@@ -135,7 +135,12 @@ class PostMergeHandler:
         return False
     
     def sync_branch(self, base_branch: str) -> bool:
-        """Sync local branch with remote after merge."""
+        """Sync local branch with remote after merge (only inside a checkout of `self.repo`)."""
+        # Every other call targets self.repo; git switch/pull act on the cwd, so refuse a different repository
+        local = subprocess.run(["gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"],
+                               capture_output=True, text=True, check=True).stdout.strip()
+        if local.lower() != self.repo.lower():
+            raise RuntimeError(f"checkout is {local}, not {self.repo}; refusing to sync")
         # Stop on a dirty worktree: `git switch` would carry local edits onto the base branch
         status = subprocess.run(["git", "status", "--porcelain"],
                                 capture_output=True, text=True, check=True)

@@ -1,3 +1,7 @@
+---
+name: gh-discussion-manager-reference
+description: Reference notes for the gh-discussion-manager workflow.
+---
 # gh-discussion-manager — Reference
 
 Linked workflow: `extensions/github/address-pr-feedback/SKILL.md`
