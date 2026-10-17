@@ -35,7 +35,10 @@ Ensure `gh` is authenticated for GitHub operations.
 Use `gh` to read merged PR/MR metadata. Extract merge commit, base branch, title, body, and any linked issue references.
 
 ```bash
-gh pr view <number> --json state,mergedAt,mergeCommit,baseRefName,title,body,url,headRefName
+# A bare number resolves in the CURRENT checkout. When the quick start gave a repository (or the PR URL),
+# keep it and pass it to every `gh pr view` below so an unrelated same-number PR is never read.
+PR_REPO_ARGS=()   # e.g. PR_REPO_ARGS=(--repo owner/repo)
+gh pr view <number> "${PR_REPO_ARGS[@]}" --json state,mergedAt,mergeCommit,baseRefName,title,body,url,headRefName
 ```
 
 If using a non-GitHub provider, use its CLI or REST API. Stop if not merged.
@@ -45,7 +48,7 @@ If using a non-GitHub provider, use its CLI or REST API. Stop if not merged.
 Continue only when `mergedAt` is non-null and a `mergeCommit` is present. Use the actual base branch (`baseRefName`) from the PR/MR; never assume `main`.
 
 ```bash
-MERGED_AT=$(gh pr view <number> --json mergedAt --jq '.mergedAt // empty')
+MERGED_AT=$(gh pr view <number> "${PR_REPO_ARGS[@]}" --json mergedAt --jq '.mergedAt // empty')
 if [[ -z "$MERGED_AT" ]]; then
   echo "❌ PR is not merged. Abort."
   exit 1
@@ -78,10 +81,12 @@ if [[ -n "${WORK_ITEM:-}" ]]; then
   esac
 else
   # 2. Otherwise infer it from the PR: closing references first, then every distinct match
-  CLOSING=$(gh pr view <number> --json closingIssuesReferences --jq '.closingIssuesReferences[] | "\(.repository.owner.login)/\(.repository.name)#\(.number)"')
+  CLOSING=$(gh pr view <number> "${PR_REPO_ARGS[@]}" --json closingIssuesReferences --jq '.closingIssuesReferences[] | "\(.repository.owner.login)/\(.repository.name)#\(.number)"') \
+    || { echo "❌ Could not read closing issue references; not falling back to title/body"; exit 1; }
   # Branch name, title and body are all searched (a Jira key may appear only in the branch), and full
   # issue URLs are normalised to owner/repo#N so the referenced repository is kept
-  TEXT=$(gh pr view <number> --json headRefName,title,body --jq '[.headRefName, .title, .body] | map(. // "") | join(" ")')
+  TEXT=$(gh pr view <number> "${PR_REPO_ARGS[@]}" --json headRefName,title,body --jq '[.headRefName, .title, .body] | map(. // "") | join(" ")') \
+    || { echo "❌ Could not read PR title/body"; exit 1; }
   CANDIDATES=${CLOSING:-$( {
       echo "$TEXT" | grep -oE 'https://github\.com/[^/ ]+/[^/ ]+/issues/[0-9]+' \
         | sed -E 's|https://github\.com/([^/]+/[^/]+)/issues/([0-9]+)|\1#\2|'
