@@ -48,6 +48,7 @@ Do not assume Jira, Jira status names, or Jira commands for GitHub Issues, GitLa
 Before changing branches, check for local modifications and do not discard them. Switch to the merge request's base branch and update it safely:
 
 ```bash
+[[ -z "$(git status --porcelain)" ]] || { echo "❌ Dirty worktree (incl. untracked files) — not switching branches"; exit 1; }  # git switch would carry local edits onto the base branch
 git switch <base-branch>
 git pull --ff-only
 ```
