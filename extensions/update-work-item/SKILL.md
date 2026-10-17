@@ -89,7 +89,10 @@ Works for any issue type — story, task, sub-task, bug, epic.
 #### GitHub (gh)
 
 ```bash
-[[ -n "$COMMENT_BODY" ]] && gh issue comment "$GITHUB_ISSUE" "${GH_REPO[@]}" --body "$COMMENT_BODY"
+if [[ -n "$COMMENT_BODY" ]]; then
+  gh issue comment "$GITHUB_ISSUE" "${GH_REPO[@]}" --body "$COMMENT_BODY" \
+    || { echo "❌ Could not add GitHub comment to $GITHUB_ISSUE"; exit 1; }
+fi
 ```
 
 ### 3. Change status / state

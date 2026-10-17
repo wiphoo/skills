@@ -94,6 +94,8 @@ else
 fi
 # A reference like owner/repo#42 keeps its own repository; a bare #42 belongs to the PR's repository
 if [[ "$ISSUE_REF" == */*#* ]]; then ISSUE_REPO="${ISSUE_REF%%#*}"; else ISSUE_REPO="<PR owner/repo>"; fi
+# Jira step 4.1 uses JIRA_ISSUE, so set it whenever the resolved reference is a Jira key
+if [[ "$ISSUE_REF" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]]; then JIRA_ISSUE="$ISSUE_REF"; fi
 ```
 
 ### 4. Update the source record
@@ -142,7 +144,8 @@ The issue may live in a different repository than the current checkout. Choose `
 
 ```bash
 # ISSUE_REPO was set in step 3: the repo of an owner/repo#N reference or explicit issue URL, else the PR's repo
-gh issue comment <issue_number> --repo "$ISSUE_REPO" --body "PR merged: <URL>\nMerge commit: <COMMIT>\nBase branch: <BASE_BRANCH>"
+gh issue comment <issue_number> --repo "$ISSUE_REPO" --body "PR merged: <URL>\nMerge commit: <COMMIT>\nBase branch: <BASE_BRANCH>" \
+  || { echo "❌ Could not add GitHub comment to $ISSUE_REPO#<issue_number>"; exit 1; }  # stop before label/branch sync
 ```
 
 Update status via label or field (if using GitHub Projects):
